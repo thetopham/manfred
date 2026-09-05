@@ -17,3 +17,5 @@ Source: Brain draft head `4eccc7e4678c2cd7eafb70a38fcdffe687690639`, limited to 
 ## Validation boundaries
 
 Validation results are recorded alongside this document. Server tests use synthetic temporary archives and an independent dependency environment. Android helper/overlay tests are source checks; they do not prove a compiled APK or physical capture. The inspected remote host has no Flutter executable on PATH and no detected Flutter/Android SDK directory. No phone, Accessibility service, receiver, scheduler, live archive, or secret configuration was changed.
+
+Final baseline merge: `b9460b26c4699b74ae9980aebfd463da4c6d8220`, including the executable-launcher permission check and regression. It merged without conflicts. Final standalone validation passed all 167 Python tests in 28.974 seconds; installed-package and CLI checks passed in the independent environment. See `FINAL_VALIDATION.txt`. Android APK compilation and physical capture are not claimed.

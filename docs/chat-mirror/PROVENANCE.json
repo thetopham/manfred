@@ -282,10 +282,12 @@
     "docs/chat-mirror/VALIDATION.txt"
   ],
   "validation": {
-    "independent_python_tests": 166,
+    "independent_python_tests": 167,
     "android_overlay_and_helper_tests": "passed within Python suite",
     "android_build": "not run: Flutter unavailable on PATH",
     "physical_device": "not run",
-    "live_runtime_changed": false
-  }
+    "live_runtime_changed": false,
+    "final_evidence": "docs/chat-mirror/FINAL_VALIDATION.txt"
+  },
+  "merged_baseline": "b9460b26c4699b74ae9980aebfd463da4c6d8220"
 }
