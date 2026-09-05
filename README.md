@@ -1,6 +1,6 @@
 # Manfred
 
-Manfred is the app and its services: the wearable Companion client, Ears audio/transcription, and existing visual evidence capture. Eyes through CyanBridge are planned. This extraction adds no new capture capability and activates no workers or services.
+Manfred is the app and its services: the wearable Companion client, Ears audio/transcription, and existing visual evidence capture. The companion now includes an experimental EyeVue photo session; see [EyeVue photos](docs/eyevue-photos.md) for its hardware acceptance gates. It activates no backend workers or services.
 
 ## Ownership
 

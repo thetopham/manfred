@@ -1,6 +1,6 @@
 # Manfred Companion — direct S25 wearable bridge
 
-Manfred Companion is the mobile connector between **Omi Dev Kit 2**, the Samsung Galaxy S25, and Demerzel. It continues the user-owned data-spine idea from [`thetopham/exocortex`](https://github.com/thetopham/exocortex), and implementation now belongs to the private `thetopham/manfred` repository alongside Ears and existing vision services. Eyes through CyanBridge are planned; this extraction adds no new device functionality.
+Manfred Companion is the mobile connector between **Omi Dev Kit 2**, the Samsung Galaxy S25, and Demerzel. It continues the user-owned data-spine idea from [`thetopham/exocortex`](https://github.com/thetopham/exocortex), and implementation now belongs to the private `thetopham/manfred` repository alongside Ears and existing vision services. An experimental EyeVue photo session is now included; see [EyeVue setup and acceptance](../../docs/eyevue-photos.md).
 
 The predecessor's durable ideas are preserved:
 
