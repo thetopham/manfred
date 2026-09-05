@@ -14,6 +14,24 @@ class EyevuePhotoValidationTest {
         assertTrue(hasCompleteJpegEnvelope(it, -1))
     }
 
+    @Test fun acceptsObservedZeroAlignmentAfterJpegEndWithoutChangingNetworkLength() {
+        val jpeg = byteArrayOf(0xff.toByte(), 0xd8.toByte(), 1, 2, 0xff.toByte(), 0xd9.toByte())
+        for (padding in 1..3) {
+            val original = jpeg + ByteArray(padding)
+            withFile(original) {
+                assertTrue(hasCompleteJpegEnvelope(it, original.size.toLong()))
+                assertFalse(hasCompleteJpegEnvelope(it, jpeg.size.toLong()))
+                assertEquals(original.size.toLong(), it.length())
+            }
+        }
+    }
+
+    @Test fun refusesNonzeroTrailingDataAndExcessPadding() {
+        val jpeg = byteArrayOf(0xff.toByte(), 0xd8.toByte(), 1, 2, 0xff.toByte(), 0xd9.toByte())
+        withFile(jpeg + byteArrayOf(1, 0, 0)) { assertFalse(hasCompleteJpegEnvelope(it, -1)) }
+        withFile(jpeg + ByteArray(4)) { assertFalse(hasCompleteJpegEnvelope(it, -1)) }
+    }
+
     @Test fun rejectsMissingEndMarkerEvenWhenHttpLengthMatches() = withFile(byteArrayOf(0xff.toByte(), 0xd8.toByte(), 1, 2)) {
         assertFalse(hasCompleteJpegEnvelope(it, 4))
         assertFalse(hasCompleteJpegEnvelope(it, -1))

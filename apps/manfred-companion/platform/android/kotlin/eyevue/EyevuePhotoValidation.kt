@@ -18,8 +18,18 @@ internal fun hasCompleteJpegEnvelope(file: File, expectedBytes: Long): Boolean {
     val size = file.length()
     if (size < 4 || (expectedBytes >= 0 && size != expectedBytes)) return false
     return RandomAccessFile(file, "r").use { input ->
-        val start = input.readUnsignedShort()
-        input.seek(size - 2)
-        start == 0xffd8 && input.readUnsignedShort() == 0xffd9
+        if (input.readUnsignedShort() != 0xffd8) return@use false
+        // The verified TK8 original includes up to three zero alignment bytes
+        // after EOI. Preserve those original bytes; reject other trailing data.
+        var end = size
+        var padding = 0
+        while (padding < 3 && end > 4) {
+            input.seek(end - 1)
+            if (input.readUnsignedByte() != 0) break
+            end--
+            padding++
+        }
+        input.seek(end - 2)
+        input.readUnsignedShort() == 0xffd9
     }
 }

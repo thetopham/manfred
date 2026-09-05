@@ -15,7 +15,7 @@ The phone retains its normal internet route for Omi uploads; only EyeVue HTTP so
 
 ## Hardware acceptance remains explicit
 
-The earlier CyanBridge build downloaded originals at 3200x2400. Repeated bulk sync downloaded the whole album again. Its BLE shutter preview was 320x180; neither tested opaque image-pull value returned a larger image.
+The earlier CyanBridge build downloaded originals at 3200x2400. The independently decoded reference original contains a JPEG end marker followed by three zero alignment bytes. Validation accepts up to three zero bytes after the end marker, retains the original bytes, and still checks HTTP completion and Android decoding. Repeated bulk sync downloaded the whole album again. Its BLE shutter preview was 320x180; neither tested opaque image-pull value returned a larger image.
 
 This implementation holds one AP session open, polls for new photos, and waits for a stable manifest entry before importing it. Whether TK8 firmware will capture and expose new originals while the AP remains active must be measured on the glasses. The acceptance test is two new full-resolution photos imported once each without reconnecting Wi-Fi, plus a measured shutter-to-save delay.
 
