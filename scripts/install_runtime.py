@@ -18,7 +18,7 @@ REPO = Path(__file__).resolve().parents[1]
 ROLE_UNITS = {
     "none": (),
     "demerzel": ("manfred-ears-forward.service", "manfred-ears-forward.socket", "manfred-ears-wiki-sync.service", "manfred-ears-wiki-sync.timer"),
-    "manfred-data-plane": ("manfred-ears-receiver.service", "manfred-ears-operator.service", "manfred-vision-receiver.service"),
+    "manfred-data-plane": ("manfred-ears-receiver.service", "manfred-ears-operator.service", "manfred-vision-receiver.service", "manfred-chat-mirror-receiver.service"),
 }
 
 
@@ -70,6 +70,7 @@ def values(args: argparse.Namespace) -> dict[str, str]:
         "MANFRED_EXPORT_SOURCE": args.export_source,
         "MANFRED_RECEIVER_HOST": args.receiver_host,
         "MANFRED_VISION_HOST": args.vision_host,
+        "MANFRED_CHAT_MIRROR_HOST": args.chat_mirror_host,
         "MANFRED_FORWARD_LISTEN": args.forward_listen,
         "MANFRED_FORWARD_TARGET": args.forward_target,
     }
@@ -165,6 +166,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--export-ssh-key", type=Path, default=Path(os.getenv("MANFRED_EXPORT_SSH_KEY", str(home / ".ssh/demerzel_fleet"))))
     parser.add_argument("--receiver-host", default=os.getenv("MANFRED_RECEIVER_HOST", "100.112.32.64"))
     parser.add_argument("--vision-host", default=os.getenv("MANFRED_VISION_HOST", "100.112.32.64"))
+    parser.add_argument("--chat-mirror-host", default=os.getenv("MANFRED_CHAT_MIRROR_HOST", "100.112.32.64"))
     parser.add_argument("--forward-listen", default="100.126.233.3:8787")
     parser.add_argument("--forward-target", default="100.112.32.64:8787")
     parser.add_argument("--install-runtime-deps", action="store_true")

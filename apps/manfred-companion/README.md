@@ -27,7 +27,28 @@ Manfred Ears receiver on Demerzel
 Parakeet Unified EN 0.6B or faster-whisper
 ```
 
-The older Brilliant Labs Frame remains the next output peripheral. Flutter is intentional because the eventual S25 companion should own both Omi BLE input and Frame BLE/display output.
+The older Brilliant Labs Frame remains a later output peripheral. Flutter is intentional because the S25 companion owns durable wearable evidence and can add EyeVue/Frame adapters without moving canonical memory into a vendor app.
+
+## ChatGPT Conversation Mirror MVP
+
+The initial realtime cognition interface remains the actual ChatGPT Android Live app. Manfred Companion does not inspect authentication or call private ChatGPT APIs. Its Android overlay declares one Accessibility service whose resource-level `packageNames` filter and runtime guard both restrict observation to `com.openai.chatgpt`; the service performs no clicks, typing, gestures, or generic phone automation.
+
+The first mirror slice is:
+
+```text
+visible ChatGPT UI/history text
+→ bounded native Accessibility snapshot
+→ AtomicFile commit under app-private storage
+→ Flutter import into a payload+metadata spool
+→ SHA-256 recheck immediately before upload
+→ tailnet-only POST /chat-mirror with a distinct ingest token
+```
+
+Each snapshot says exactly what it is: an `android-accessibility` observation with `partial`, `complete`, or `gap` completeness and `provisional` or `final` state. Password-bearing windows are not captured; they produce a gap marker. The event package and active root package must both be ChatGPT. Identical consecutive snapshots are deduplicated locally, Android app backup is disabled, and native files are deleted only after the Flutter spool commits them. The server still enforces hash-sensitive idempotency and unique `(mirror session, sequence)` evidence.
+
+The app exposes Chat Mirror endpoint/token settings, explicit saved-credential clearing, Accessibility settings, manual sync, queued-event count, and explicit native-plus-spool chat deletion. A 15-second foreground polling loop imports and drains while the Flutter process is alive. Process-kill wakeup and exact ChatGPT conversation-ID extraction remain later reliability work.
+
+No physical claim is made yet about ChatGPT's real Accessibility tree, Live transcript completeness, session-boundary quality, EyeVue image attachment, or simultaneous custom-BLE Opus plus HFP audio.
 
 ## Implemented vertical slice
 
@@ -61,7 +82,11 @@ The app source currently provides:
 - SHA-256 pseudonymization of the BLE device ID before it enters request URLs/access logs;
 - Android `connectedDevice` foreground-service declaration;
 - explicit start, stop, delete-queued-audio, and delete-validation-packets controls;
-- visible BLE/codec/packet/PCM/queue/upload/error state.
+- visible BLE/codec/packet/PCM/queue/upload/error state;
+- ChatGPT-package-only Accessibility observation with password-window gap markers and no UI actions;
+- native AtomicFile retention, Flutter payload+metadata Chat Mirror spool, and import-before-delete ordering;
+- a separate tailnet `/chat-mirror` endpoint/token policy with pre-upload SHA-256 validation;
+- visible Chat Mirror Accessibility, receiver, queue, sync, and delete controls.
 
 Stop is an evidence-finalization boundary, not a network boundary. It disconnects BLE, drains already accepted packet work, commits the final PCM fragment, and ends the foreground capture service before returning. Upload retries continue independently from the durable spool, so an unreachable receiver cannot pin the Stop button behind one or more ten-second request timeouts. Live queue counts are revision-fenced and no longer rescan the complete spool after every BLE packet, preventing a large offline backlog from turning packet shutdown into quadratic directory work.
 

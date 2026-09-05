@@ -14,6 +14,7 @@ from fastapi import FastAPI, Header, HTTPException, Query, Request, status
 
 from .archive import AudioArchive, CaptureMetadata
 from .asr import ASRBackend, build_asr, require_full_session_vad
+from .chat_mirror import ChatMirrorArchive
 from .config import Settings
 from .episodes import EpisodeArchive
 from .vad import EnergySpeechGate, SpeechGate
@@ -451,6 +452,71 @@ def create_vision_receiver_app(
     return app
 
 
+def create_chat_mirror_receiver_app(
+    settings: Settings | None = None,
+    *,
+    archive: ChatMirrorArchive | None = None,
+) -> FastAPI:
+    """Create a receiver-only ChatGPT Accessibility observation surface."""
+    settings = settings or Settings.from_env()
+    chat_secret = _require_configured_token(
+        settings.chat_mirror_token,
+        "MANFRED_CHAT_MIRROR_TOKEN",
+    )
+    resolved_archive = archive or ChatMirrorArchive(settings)
+    app = FastAPI(
+        title="Manfred Chat Mirror receiver",
+        version="0.1.0",
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
+    app.state.settings = settings
+    app.state.chat_mirror_archive = resolved_archive
+
+    @app.post("/chat-mirror", status_code=status.HTTP_202_ACCEPTED)
+    async def receive_chat_mirror_event(
+        request: Request,
+        chat_token: str | None = Header(None, alias="X-Manfred-Chat-Token"),
+        authorization: str | None = Header(None, alias="Authorization"),
+        idempotency_key: str = Header(..., alias="Idempotency-Key"),
+        content_sha256: str = Header(..., alias="X-Manfred-Content-SHA256"),
+    ) -> dict:
+        if not _token_ok(chat_secret, chat_token, _bearer_value(authorization)):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="invalid chat mirror token",
+            )
+        content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+        if content_type != "application/json":
+            raise HTTPException(status_code=415, detail="expected application/json")
+        body = await _read_bounded_body(
+            request,
+            settings.max_chat_mirror_body_bytes,
+            label="chat mirror body",
+        )
+        try:
+            result = await asyncio.to_thread(
+                resolved_archive.ingest,
+                body=body,
+                idempotency_key=idempotency_key,
+                claimed_sha256=content_sha256,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {
+            "accepted": True,
+            "duplicate": result.duplicate,
+            "event_id": result.event_id,
+            "mirror_session_id": result.mirror_session_id,
+            "sequence_number": result.sequence_number,
+            "sha256": result.sha256,
+            "received_at": result.received_at,
+        }
+
+    return app
+
+
 def create_operator_app(
     settings: Settings | None = None,
     *,
@@ -463,6 +529,7 @@ def create_operator_app(
     operator_secret = _require_configured_token(settings.operator_token, "MANFRED_OPERATOR_TOKEN")
     archive, asr = _runtime(settings, archive, asr)
     vision_archive = VisionArchive(settings)
+    chat_mirror_archive = ChatMirrorArchive(settings)
     episodes = EpisodeArchive(settings)
     gate = _speech_gate(settings, speech_gate)
     app = FastAPI(
@@ -476,6 +543,7 @@ def create_operator_app(
     app.state.archive = archive
     app.state.asr = asr
     app.state.vision_archive = vision_archive
+    app.state.chat_mirror_archive = chat_mirror_archive
     app.state.episodes = episodes
     app.state.speech_gate = gate
 
@@ -507,6 +575,7 @@ def create_operator_app(
         return {
             **archive.status(),
             "vision": vision_archive.status(),
+            "chat_mirror": chat_mirror_archive.status(),
             "multimodal": episodes.status(),
         }
 
@@ -543,6 +612,43 @@ def create_operator_app(
         authorize(operator_token, authorization)
         hits = archive.search(q, limit)
         return {"query": q, "count": len(hits), "hits": hits}
+
+    @app.get("/v1/chat-mirror/search")
+    def search_chat_mirror(
+        q: str = Query(..., min_length=1, max_length=500),
+        limit: int = Query(10, ge=1, le=100),
+        operator_token: str | None = Header(None, alias="X-Manfred-Operator-Token"),
+        authorization: str | None = Header(None, alias="Authorization"),
+    ) -> dict:
+        authorize(operator_token, authorization)
+        try:
+            hits = chat_mirror_archive.search(q, limit)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {"query": q, "count": len(hits), "hits": hits}
+
+    @app.get("/v1/chat-mirror/sessions/{mirror_session_id}")
+    def get_chat_mirror_session(
+        mirror_session_id: str,
+        operator_token: str | None = Header(None, alias="X-Manfred-Operator-Token"),
+        authorization: str | None = Header(None, alias="Authorization"),
+    ) -> dict:
+        authorize(operator_token, authorization)
+        try:
+            return chat_mirror_archive.get_session(mirror_session_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="unknown chat mirror session") from exc
+
+    @app.delete("/v1/chat-mirror/sessions/{mirror_session_id}")
+    def delete_chat_mirror_session(
+        mirror_session_id: str,
+        operator_token: str | None = Header(None, alias="X-Manfred-Operator-Token"),
+        authorization: str | None = Header(None, alias="Authorization"),
+    ) -> dict:
+        authorize(operator_token, authorization)
+        if not chat_mirror_archive.delete_session(mirror_session_id):
+            raise HTTPException(status_code=404, detail="unknown chat mirror session")
+        return {"deleted": True, "mirror_session_id": mirror_session_id}
 
     @app.post("/v1/episodes/refresh")
     async def refresh_episodes(

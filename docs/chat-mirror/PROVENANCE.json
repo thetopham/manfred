@@ -1,0 +1,293 @@
+{
+  "schema": 1,
+  "source_repository": "https://github.com/thetopham/brain",
+  "source_base": "35d72eb49488206e5d71c1bfdd8b7228cc6da3e2",
+  "source_head": "4eccc7e4678c2cd7eafb70a38fcdffe687690639",
+  "destination_base": "36af66ae5e0cac0949f1994afe0d802b5913bbe8",
+  "files": [
+    {
+      "status": "M",
+      "source_path": "apps/manfred-companion/README.md",
+      "destination_path": "apps/manfred-companion/README.md",
+      "base_sha256": "8fbf3eb32de696d434a6d53c3475ed599d9356d69884b7a8174ba9321f8197cb",
+      "candidate_sha256": "709a11277b09b56e9ba1f095fbe6e038a2fb41710937db1cf0aa0acc9f14afc2",
+      "reconciled_sha256": "f73fe8a410972457303f04d74be86ecc06f61334fd1571483e65fd8ce55a2b9c",
+      "adapted_from_candidate": true
+    },
+    {
+      "status": "M",
+      "source_path": "apps/manfred-companion/lib/main.dart",
+      "destination_path": "apps/manfred-companion/lib/main.dart",
+      "base_sha256": "425b0c29331e687f0b93e86afafcbf7729f1a793ab448847c00431b3cdbdb4b9",
+      "candidate_sha256": "840c806e09c6ea4547148b4529b00bf2a3bb4df43579dd12c259612f65919474",
+      "reconciled_sha256": "840c806e09c6ea4547148b4529b00bf2a3bb4df43579dd12c259612f65919474",
+      "adapted_from_candidate": false
+    },
+    {
+      "status": "M",
+      "source_path": "apps/manfred-companion/lib/src/bridge_controller.dart",
+      "destination_path": "apps/manfred-companion/lib/src/bridge_controller.dart",
+      "base_sha256": "5cd3122262ef36ba1df3c952313738638c6e392becfecfd0527989749484a7d7",
+      "candidate_sha256": "d84281ec807db1ecc901863977ea31dcb4ebf85dac1b331d08893d1c5fe553eb",
+      "reconciled_sha256": "8227c16dec7838f99a419180683cde7e24b579457b3c32f12c327a02b320b2e0",
+      "adapted_from_candidate": true
+    },
+    {
+      "status": "A",
+      "source_path": "apps/manfred-companion/lib/src/chat_mirror.dart",
+      "destination_path": "apps/manfred-companion/lib/src/chat_mirror.dart",
+      "base_sha256": null,
+      "candidate_sha256": "ef429fc5b15617a2f5ddfce1bf2bea6f37c7b34ba43292d3ea60b1d6309b5af2",
+      "reconciled_sha256": "ef429fc5b15617a2f5ddfce1bf2bea6f37c7b34ba43292d3ea60b1d6309b5af2",
+      "adapted_from_candidate": false
+    },
+    {
+      "status": "M",
+      "source_path": "apps/manfred-companion/lib/src/config_store.dart",
+      "destination_path": "apps/manfred-companion/lib/src/config_store.dart",
+      "base_sha256": "cb515318c2fe05d2b06029e8276ca754e3448271b82f9eb47805245e95271c8f",
+      "candidate_sha256": "d3ac6c088a6cf8a0d0ee36e82968c9780203e1e846c60be9b0574fe16be5cd97",
+      "reconciled_sha256": "d3ac6c088a6cf8a0d0ee36e82968c9780203e1e846c60be9b0574fe16be5cd97",
+      "adapted_from_candidate": false
+    },
+    {
+      "status": "M",
+      "source_path": "apps/manfred-companion/platform/android/AndroidManifest.xml",
+      "destination_path": "apps/manfred-companion/platform/android/AndroidManifest.xml",
+      "base_sha256": "585f558b05f3c80d7f8400410d4255dd5b9aeb94e41c4e7e94922d58bfeb9cdb",
+      "candidate_sha256": "6facc9fe9394982657050381914e2af977b145afac309e332d9846347c0ee8c6",
+      "reconciled_sha256": "6facc9fe9394982657050381914e2af977b145afac309e332d9846347c0ee8c6",
+      "adapted_from_candidate": false
+    },
+    {
+      "status": "A",
+      "source_path": "apps/manfred-companion/platform/android/kotlin/ChatMirrorAccessibilityService.kt",
+      "destination_path": "apps/manfred-companion/platform/android/kotlin/ChatMirrorAccessibilityService.kt",
+      "base_sha256": null,
+      "candidate_sha256": "6756885c4a09c099e9620137895828350866ddc72dbe4f7f328b58675844a014",
+      "reconciled_sha256": "6756885c4a09c099e9620137895828350866ddc72dbe4f7f328b58675844a014",
+      "adapted_from_candidate": false
+    },
+    {
+      "status": "A",
+      "source_path": "apps/manfred-companion/platform/android/kotlin/ChatMirrorQuota.kt",
+      "destination_path": "apps/manfred-companion/platform/android/kotlin/ChatMirrorQuota.kt",
+      "base_sha256": null,
+      "candidate_sha256": "b9dbf6006c3e0e53bc0a2131e1304fc0e47e800aada63ec74f78cbd74f6c8a24",
+      "reconciled_sha256": "b9dbf6006c3e0e53bc0a2131e1304fc0e47e800aada63ec74f78cbd74f6c8a24",
+      "adapted_from_candidate": false
+    },
+    {
+      "status": "A",
+      "source_path": "apps/manfred-companion/platform/android/kotlin/MainActivity.kt",
+      "destination_path": "apps/manfred-companion/platform/android/kotlin/MainActivity.kt",
+      "base_sha256": null,
+      "candidate_sha256": "b22b3ce7048652db3cfcf41e34decf9be980d959c1ff7338c56d51666622e4f4",
+      "reconciled_sha256": "b22b3ce7048652db3cfcf41e34decf9be980d959c1ff7338c56d51666622e4f4",
+      "adapted_from_candidate": false
+    },
+    {
+      "status": "A",
+      "source_path": "apps/manfred-companion/platform/android/res/values/chat_mirror_strings.xml",
+      "destination_path": "apps/manfred-companion/platform/android/res/values/chat_mirror_strings.xml",
+      "base_sha256": null,
+      "candidate_sha256": "5c5f1e84f1de3552a449795705825bb25272c2d0ce75e3ac7df7fbc8defe1524",
+      "reconciled_sha256": "5c5f1e84f1de3552a449795705825bb25272c2d0ce75e3ac7df7fbc8defe1524",
+      "adapted_from_candidate": false
+    },
+    {
+      "status": "A",
+      "source_path": "apps/manfred-companion/platform/android/res/xml/chat_mirror_accessibility_service.xml",
+      "destination_path": "apps/manfred-companion/platform/android/res/xml/chat_mirror_accessibility_service.xml",
+      "base_sha256": null,
+      "candidate_sha256": "def0cb4c147972f9a1cd09b4d82ee2f3a0ffb7062b7a4ea9992c68c28c7d0a28",
+      "reconciled_sha256": "def0cb4c147972f9a1cd09b4d82ee2f3a0ffb7062b7a4ea9992c68c28c7d0a28",
+      "adapted_from_candidate": false
+    },
+    {
+      "status": "M",
+      "source_path": "apps/manfred-companion/pubspec.yaml",
+      "destination_path": "apps/manfred-companion/pubspec.yaml",
+      "base_sha256": "7912f5e2fb1c09806b5c451dc1c0cf4cae4c1be067a0a8cbfcf63bc128f8575b",
+      "candidate_sha256": "f173b4b2f15f11ea99ee8588c68c142f9e79454ad95871dcc1f1898354e822d0",
+      "reconciled_sha256": "f173b4b2f15f11ea99ee8588c68c142f9e79454ad95871dcc1f1898354e822d0",
+      "adapted_from_candidate": false
+    },
+    {
+      "status": "A",
+      "source_path": "apps/manfred-companion/test/chat_mirror_test.dart",
+      "destination_path": "apps/manfred-companion/test/chat_mirror_test.dart",
+      "base_sha256": null,
+      "candidate_sha256": "55fd5f937d45e6be2d08d4d51ce483bfdce9934b7af95255fd8ba33c5012d4c5",
+      "reconciled_sha256": "55fd5f937d45e6be2d08d4d51ce483bfdce9934b7af95255fd8ba33c5012d4c5",
+      "adapted_from_candidate": false
+    },
+    {
+      "status": "M",
+      "source_path": "apps/manfred-companion/test/config_store_test.dart",
+      "destination_path": "apps/manfred-companion/test/config_store_test.dart",
+      "base_sha256": "9a7244d9b87ffe71b8e5e78fd3ed79b79884171866d1662732a7691ac7c6d3bf",
+      "candidate_sha256": "25b8512d19ebcbc61ce8ce8613e7d56ce8b7a43c241e0bbc6f1438f2ddef4cc3",
+      "reconciled_sha256": "25b8512d19ebcbc61ce8ce8613e7d56ce8b7a43c241e0bbc6f1438f2ddef4cc3",
+      "adapted_from_candidate": false
+    },
+    {
+      "status": "M",
+      "source_path": "apps/manfred-companion/test/settings_dialog_test.dart",
+      "destination_path": "apps/manfred-companion/test/settings_dialog_test.dart",
+      "base_sha256": "022f6f47f727a06b9a4b90e9b8dee0169b6d590cfabccafeca89e0cd71a2604b",
+      "candidate_sha256": "479e921f465a49c26206d2645f40d21a86137c23eff7486ffe624ec1efe610d4",
+      "reconciled_sha256": "479e921f465a49c26206d2645f40d21a86137c23eff7486ffe624ec1efe610d4",
+      "adapted_from_candidate": false
+    },
+    {
+      "status": "M",
+      "source_path": "apps/manfred-companion/tool/materialize_android.sh",
+      "destination_path": "apps/manfred-companion/tool/materialize_android.sh",
+      "base_sha256": "478e6bead8fa34b9ff8fadcdb53c1fd595a50fab991ad24b72e07f650693f2d6",
+      "candidate_sha256": "0f8314c1772acd3fdfdc4250ff44e7a82425086460c72a7b23a6f3c5075b04eb",
+      "reconciled_sha256": "0f8314c1772acd3fdfdc4250ff44e7a82425086460c72a7b23a6f3c5075b04eb",
+      "adapted_from_candidate": false
+    },
+    {
+      "status": "M",
+      "source_path": "ingestion/manfred-ears/README.md",
+      "destination_path": "docs/ears.md",
+      "base_sha256": "bfa5f729fa96c9bf254abf95c0ad492c256ded546884e3a7a98bf563b77a7663",
+      "candidate_sha256": "f8febdfd6e9df27906e211e27924eaf5ccc7fb98effa2da4699705b2596f8fcc",
+      "reconciled_sha256": "b5ab509c4730b9134dfd14c249838b930ed50c2482753091415173eb4e9dc2f0",
+      "adapted_from_candidate": true
+    },
+    {
+      "status": "A",
+      "source_path": "ingestion/manfred-ears/deploy/systemd/manfred-chat-mirror-receiver.service",
+      "destination_path": "deploy/systemd/manfred-chat-mirror-receiver.service",
+      "base_sha256": null,
+      "candidate_sha256": "f64fd96ac6a8a2eb10f8964f85ec2f1942de40d830fca0c0a92a96773aceb932",
+      "reconciled_sha256": "83dfc741d9bd1054c266325b689a161bf7a4b6a3003acceadbae6c1366bf36d3",
+      "adapted_from_candidate": true
+    },
+    {
+      "status": "M",
+      "source_path": "ingestion/manfred-ears/deploy/systemd/manfred-ears.env.example",
+      "destination_path": "deploy/systemd/manfred-ears.env.example",
+      "base_sha256": "824223788e89a797a1d2fbb0edc6c2de834bf11c996c833b6955cf6c023c5b8d",
+      "candidate_sha256": "6ecc5d0845445c03f3de1fde498e4041d473a7415ddab8841c9d8bdfd99f936a",
+      "reconciled_sha256": "c37797328ba80a6eeaee1bb631fabb1a6b384c19b802e08e59b9abb63a7e08ed",
+      "adapted_from_candidate": true
+    },
+    {
+      "status": "M",
+      "source_path": "ingestion/manfred-ears/manfred_ears/__init__.py",
+      "destination_path": "manfred_ears/__init__.py",
+      "base_sha256": "f41ab10f6b5c2ccf6d919fbca7a764e54c89c3d896941415da4641b151ffbf47",
+      "candidate_sha256": "108e14ba053de9ea9a926685e4f256282184745d06e6476a363f8aca3e3def7f",
+      "reconciled_sha256": "108e14ba053de9ea9a926685e4f256282184745d06e6476a363f8aca3e3def7f",
+      "adapted_from_candidate": false
+    },
+    {
+      "status": "A",
+      "source_path": "ingestion/manfred-ears/manfred_ears/chat_mirror.py",
+      "destination_path": "manfred_ears/chat_mirror.py",
+      "base_sha256": null,
+      "candidate_sha256": "99232196d33e9523dbcd8925c5a5cd18e2c7960d2b6df847dd810d9736c39efc",
+      "reconciled_sha256": "99232196d33e9523dbcd8925c5a5cd18e2c7960d2b6df847dd810d9736c39efc",
+      "adapted_from_candidate": false
+    },
+    {
+      "status": "M",
+      "source_path": "ingestion/manfred-ears/manfred_ears/cli.py",
+      "destination_path": "manfred_ears/cli.py",
+      "base_sha256": "bab75447db4d69d891549c141cb32ddc4d2f1574daa697a025b5fe1e8b0974f7",
+      "candidate_sha256": "e740ff03aa7fdee5d06037d8419fd8170244387442a55b9e581bb6929a49c287",
+      "reconciled_sha256": "e740ff03aa7fdee5d06037d8419fd8170244387442a55b9e581bb6929a49c287",
+      "adapted_from_candidate": false
+    },
+    {
+      "status": "M",
+      "source_path": "ingestion/manfred-ears/manfred_ears/config.py",
+      "destination_path": "manfred_ears/config.py",
+      "base_sha256": "b1a52ae024d71f014beb5e76a53c9b66684bfc3bfd771bb4d0d984274641a841",
+      "candidate_sha256": "085277d386b1fe5ccc74cc43232ab32333e21fbc74cc7955260fc904be8e124e",
+      "reconciled_sha256": "66c9c7ab4e117dea321455edafc0348677ced26675854e400e510312c36626ac",
+      "adapted_from_candidate": true
+    },
+    {
+      "status": "M",
+      "source_path": "ingestion/manfred-ears/manfred_ears/service.py",
+      "destination_path": "manfred_ears/service.py",
+      "base_sha256": "1c0a1a7a7f9ce41a74d35b3606a22b65e872b0d29be961e8acaf71bfe9d49bba",
+      "candidate_sha256": "0b06ab271b783518e8f5259b792494b1cabcf9ce25c29b4bc66ec49a07bdbe07",
+      "reconciled_sha256": "0b06ab271b783518e8f5259b792494b1cabcf9ce25c29b4bc66ec49a07bdbe07",
+      "adapted_from_candidate": false
+    },
+    {
+      "status": "A",
+      "source_path": "ingestion/manfred-ears/tests/test_chat_mirror.py",
+      "destination_path": "tests/test_chat_mirror.py",
+      "base_sha256": null,
+      "candidate_sha256": "bde8978b54f84d232dafea28057c4a67a9466ac06263542f01083b1832c9a904",
+      "reconciled_sha256": "3afaff90431348fb1a4cc5e0cf1ffed30acccb62414073e0be343ca8bec9ef0f",
+      "adapted_from_candidate": true
+    },
+    {
+      "status": "A",
+      "source_path": "ingestion/manfred-ears/tests/test_chat_mirror_android_overlay.py",
+      "destination_path": "tests/test_chat_mirror_android_overlay.py",
+      "base_sha256": null,
+      "candidate_sha256": "86a7268dce4d657029e5686a88a3f0811f1b2beaa66372fb2799d196591dd672",
+      "reconciled_sha256": "a60decc11313934775cb341a33309c3f76a783cd73b7139631f8f2211d8848a1",
+      "adapted_from_candidate": true
+    }
+  ],
+  "preserved_baseline_files": [
+    {
+      "path": "manfred_ears/archive.py",
+      "sha256": "42e13d5954843652de0585ffc8270e11fa3aca50d9bd5314004eba7173ca85ca"
+    },
+    {
+      "path": "manfred_ears/vision.py",
+      "sha256": "ea1d64122520c8de157f4309a5e36699fb6a8ff07647bb894d5da7a251dba9fb"
+    },
+    {
+      "path": "manfred_ears/episodes.py",
+      "sha256": "d7b46e1fd488eb329dec318ec16c40a32fd77c9d2ca4f0ee6688194249e817e7"
+    },
+    {
+      "path": "tests/test_archive.py",
+      "sha256": "55a71c4e92c4511ee7231d44f7c9a51979764b97f9a4a18e222965176ec9eca0"
+    },
+    {
+      "path": "tests/test_rolling.py",
+      "sha256": "1bbb8daf7be615f57a3ea2e68f9bec5b41b9851ff811e13151af996b014d8c8a"
+    },
+    {
+      "path": "tests/test_config.py",
+      "sha256": "5250fc72d5743e566bc7fb53e8b5f52d521e5285da71215cc35fb4eda1247f5d"
+    },
+    {
+      "path": "apps/manfred-companion/lib/src/foreground_service.dart",
+      "sha256": "8e486e0656e7882d58bad5a6c5b6944970c07980bce1771c12b81cc330948692"
+    },
+    {
+      "path": "apps/manfred-companion/test/foreground_service_result_test.dart",
+      "sha256": "55cd212bf423d3414f1a3b8e6e509fe838efe0c84ae6fc290182eef05ddbbf63"
+    }
+  ],
+  "integration_files": [
+    "scripts/install_runtime.py",
+    "tests/test_runtime_install.py",
+    "README.md",
+    "docs/chat-mirror/RECONCILIATION.md",
+    "docs/chat-mirror/VALIDATION.txt"
+  ],
+  "validation": {
+    "independent_python_tests": 167,
+    "android_overlay_and_helper_tests": "passed within Python suite",
+    "android_build": "not run: Flutter unavailable on PATH",
+    "physical_device": "not run",
+    "live_runtime_changed": false,
+    "final_evidence": "docs/chat-mirror/FINAL_VALIDATION.txt"
+  },
+  "merged_baseline": "b9460b26c4699b74ae9980aebfd463da4c6d8220"
+}

@@ -20,9 +20,13 @@ rm -rf "$DESTINATION/lib" "$DESTINATION/test"
 cp -R "$SOURCE_DIR/lib" "$DESTINATION/lib"
 cp -R "$SOURCE_DIR/test" "$DESTINATION/test"
 cp "$SOURCE_DIR/platform/android/AndroidManifest.xml" "$DESTINATION/android/app/src/main/AndroidManifest.xml"
+mkdir -p "$DESTINATION/android/app/src/main/kotlin/com/thetopham/manfred_companion"
+cp "$SOURCE_DIR/platform/android/kotlin/"*.kt \
+  "$DESTINATION/android/app/src/main/kotlin/com/thetopham/manfred_companion/"
 mkdir -p "$DESTINATION/android/app/src/main/res/xml"
 cp "$SOURCE_DIR/platform/android/network_security_config.xml" \
   "$DESTINATION/android/app/src/main/res/xml/network_security_config.xml"
+cp -R "$SOURCE_DIR/platform/android/res/." "$DESTINATION/android/app/src/main/res/"
 (
   cd "$DESTINATION"
   flutter pub get

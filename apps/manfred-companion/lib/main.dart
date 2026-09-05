@@ -63,6 +63,8 @@ class _CompanionHomeState extends State<CompanionHome> {
       builder: (BuildContext context) => SettingsDialog(
         initialEndpoint: widget.controller.config.endpoint,
         hasSavedToken: widget.controller.config.receiverToken.isNotEmpty,
+        initialChatMirrorEndpoint: widget.controller.config.chatMirrorEndpoint,
+        hasSavedChatMirrorToken: widget.controller.config.chatMirrorToken.isNotEmpty,
         initialValidationCaptureEnabled:
             widget.controller.config.validationCaptureEnabled,
       ),
@@ -71,13 +73,26 @@ class _CompanionHomeState extends State<CompanionHome> {
       return;
     }
 
-    final String chosenToken = draft.token.trim().isEmpty
-        ? widget.controller.config.receiverToken
-        : draft.token.trim();
+    final String chosenEndpoint =
+        draft.clearReceiverCredentials ? '' : draft.endpoint;
+    final String chosenToken = draft.clearReceiverCredentials
+        ? ''
+        : draft.token.trim().isEmpty
+            ? widget.controller.config.receiverToken
+            : draft.token.trim();
+    final String chosenChatMirrorEndpoint =
+        draft.clearChatMirrorCredentials ? '' : draft.chatMirrorEndpoint;
+    final String chosenChatMirrorToken = draft.clearChatMirrorCredentials
+        ? ''
+        : draft.chatMirrorToken.trim().isEmpty
+            ? widget.controller.config.chatMirrorToken
+            : draft.chatMirrorToken.trim();
     await _run(
       () => widget.controller.saveConfig(
-        endpoint: draft.endpoint,
+        endpoint: chosenEndpoint,
         token: chosenToken,
+        chatMirrorEndpoint: chosenChatMirrorEndpoint,
+        chatMirrorToken: chosenChatMirrorToken,
         validationCaptureEnabled: draft.validationCaptureEnabled,
       ),
     );
@@ -150,6 +165,15 @@ class _CompanionHomeState extends State<CompanionHome> {
               _StatusTile(label: 'Codec', value: state.codec?.name ?? 'unknown'),
               _StatusTile(label: 'Device', value: state.config.deviceId ?? 'not selected'),
               _StatusTile(label: 'Endpoint', value: state.config.endpoint.isEmpty ? 'not configured' : state.config.endpoint),
+              _StatusTile(
+                label: 'Chat Mirror Accessibility',
+                value: state.chatMirrorAccessibilityEnabled ? 'enabled' : 'disabled',
+              ),
+              _StatusTile(label: 'Chat Mirror', value: state.chatMirrorStatus),
+              _StatusTile(
+                label: 'Chat observations queued locally',
+                value: '${state.queuedChatMirrorEvents}',
+              ),
               _StatusTile(label: 'Packets (this capture)', value: '${state.packetsReceived}'),
               _StatusTile(label: 'Decoded PCM (this capture)', value: '${state.decodedPcmBytes} bytes'),
               _StatusTile(label: 'Uploaded (this capture)', value: '${state.uploadedChunks} chunks'),
@@ -183,6 +207,23 @@ class _CompanionHomeState extends State<CompanionHome> {
                 spacing: 10,
                 runSpacing: 10,
                 children: <Widget>[
+                  OutlinedButton.icon(
+                    onPressed: _busy
+                        ? null
+                        : () => _run(state.openChatMirrorAccessibilitySettings),
+                    icon: const Icon(Icons.accessibility_new),
+                    label: const Text('Enable Chat Mirror'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : () => _run(state.syncChatMirror),
+                    icon: const Icon(Icons.sync),
+                    label: const Text('Sync Chat Mirror'),
+                  ),
+                  TextButton.icon(
+                    onPressed: _busy ? null : () => _run(state.deletePendingChatMirror),
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Delete queued chat observations'),
+                  ),
                   OutlinedButton.icon(
                     onPressed: _busy || state.running ? null : _scan,
                     icon: const Icon(Icons.bluetooth_searching),
@@ -237,11 +278,19 @@ class SettingsDraft {
   const SettingsDraft({
     required this.endpoint,
     required this.token,
+    required this.chatMirrorEndpoint,
+    required this.chatMirrorToken,
+    required this.clearReceiverCredentials,
+    required this.clearChatMirrorCredentials,
     required this.validationCaptureEnabled,
   });
 
   final String endpoint;
   final String token;
+  final String chatMirrorEndpoint;
+  final String chatMirrorToken;
+  final bool clearReceiverCredentials;
+  final bool clearChatMirrorCredentials;
   final bool validationCaptureEnabled;
 }
 
@@ -250,11 +299,15 @@ class SettingsDialog extends StatefulWidget {
     super.key,
     required this.initialEndpoint,
     required this.hasSavedToken,
+    required this.initialChatMirrorEndpoint,
+    required this.hasSavedChatMirrorToken,
     required this.initialValidationCaptureEnabled,
   });
 
   final String initialEndpoint;
   final bool hasSavedToken;
+  final String initialChatMirrorEndpoint;
+  final bool hasSavedChatMirrorToken;
   final bool initialValidationCaptureEnabled;
 
   @override
@@ -264,6 +317,10 @@ class SettingsDialog extends StatefulWidget {
 class _SettingsDialogState extends State<SettingsDialog> {
   late final TextEditingController _endpointController;
   late final TextEditingController _tokenController;
+  late final TextEditingController _chatMirrorEndpointController;
+  late final TextEditingController _chatMirrorTokenController;
+  late bool _clearReceiverCredentials;
+  late bool _clearChatMirrorCredentials;
   late bool _validationCaptureEnabled;
 
   @override
@@ -271,6 +328,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
     super.initState();
     _endpointController = TextEditingController(text: widget.initialEndpoint);
     _tokenController = TextEditingController();
+    _chatMirrorEndpointController =
+        TextEditingController(text: widget.initialChatMirrorEndpoint);
+    _chatMirrorTokenController = TextEditingController();
+    _clearReceiverCredentials = false;
+    _clearChatMirrorCredentials = false;
     _validationCaptureEnabled = widget.initialValidationCaptureEnabled;
   }
 
@@ -278,6 +340,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
   void dispose() {
     _endpointController.dispose();
     _tokenController.dispose();
+    _chatMirrorEndpointController.dispose();
+    _chatMirrorTokenController.dispose();
     super.dispose();
   }
 
@@ -286,6 +350,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
       SettingsDraft(
         endpoint: _endpointController.text,
         token: _tokenController.text,
+        chatMirrorEndpoint: _chatMirrorEndpointController.text,
+        chatMirrorToken: _chatMirrorTokenController.text,
+        clearReceiverCredentials: _clearReceiverCredentials,
+        clearChatMirrorCredentials: _clearChatMirrorCredentials,
         validationCaptureEnabled: _validationCaptureEnabled,
       ),
     );
@@ -322,6 +390,52 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   : 'Stored in Android secure storage',
             ),
           ),
+          if (widget.hasSavedToken)
+            CheckboxListTile(
+              key: const Key('settings-clear-receiver-credentials'),
+              contentPadding: EdgeInsets.zero,
+              value: _clearReceiverCredentials,
+              onChanged: (bool? value) {
+                setState(() => _clearReceiverCredentials = value ?? false);
+              },
+              title: const Text('Clear saved audio receiver credentials'),
+              subtitle: const Text('Removes the endpoint and stored receiver token.'),
+            ),
+          const SizedBox(height: 12),
+          TextField(
+            key: const Key('settings-chat-mirror-endpoint'),
+            controller: _chatMirrorEndpointController,
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+            decoration: const InputDecoration(
+              labelText: 'Chat Mirror endpoint',
+              hintText: 'http://100.x.y.z:8790/chat-mirror',
+            ),
+          ),
+          TextField(
+            key: const Key('settings-chat-mirror-token'),
+            controller: _chatMirrorTokenController,
+            obscureText: true,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: InputDecoration(
+              labelText: 'Chat Mirror ingest token',
+              helperText: widget.hasSavedChatMirrorToken
+                  ? 'Saved securely — leave blank to keep it'
+                  : 'Separate from audio, vision, and operator tokens',
+            ),
+          ),
+          if (widget.hasSavedChatMirrorToken)
+            CheckboxListTile(
+              key: const Key('settings-clear-chat-mirror-credentials'),
+              contentPadding: EdgeInsets.zero,
+              value: _clearChatMirrorCredentials,
+              onChanged: (bool? value) {
+                setState(() => _clearChatMirrorCredentials = value ?? false);
+              },
+              title: const Text('Clear saved Chat Mirror credentials'),
+              subtitle: const Text('Removes the endpoint and stored ingest token.'),
+            ),
           CheckboxListTile(
             key: const Key('settings-validation-capture'),
             contentPadding: EdgeInsets.zero,
