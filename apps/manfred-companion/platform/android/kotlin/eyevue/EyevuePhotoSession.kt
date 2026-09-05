@@ -285,6 +285,9 @@ internal class EyevuePhotoSession(
                     )
                 }
                 onCommitted(image)
+                withContext<Unit>(Dispatchers.IO) {
+                    trimEyevuePhotoCache(cache, completedFile)
+                }
             }
         } finally {
             pendingFile.delete()

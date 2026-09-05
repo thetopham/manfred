@@ -30,7 +30,10 @@ class EyevueController extends ChangeNotifier {
   bool _starting = false;
   final Set<String> _emittedImageIds = <String>{};
   int _stateRevision = 0;
+  int _selectionRevision = 0;
   int? _androidSdkInt;
+  String? _selectedAddress;
+  String? _nativeAddress;
 
   bool connected = false;
   bool connecting = false;
@@ -48,6 +51,9 @@ class EyevueController extends ChangeNotifier {
   String? firmwareError;
   String? project;
   String? customer;
+  bool wifiDiscoveryPermissionGranted = false;
+  bool wifiDiscoveryLocationEnabled = false;
+  String? wifiDiscoveryStatus;
   Stream<EyevueImage> get images => _images.stream;
   bool get batteryTooLowForWifi => battery?.tooLowForWifi ?? false;
   bool get canStart => connected && !connecting && !busy && !sessionActive && !_foregroundHeld && !batteryTooLowForWifi;
@@ -65,12 +71,26 @@ class EyevueController extends ChangeNotifier {
       },
     );
     try {
-      address = await _settings.loadAddress();
+      final int selectionRevision = _selectionRevision;
+      final String? savedAddress = await _settings.loadAddress();
+      if (selectionRevision == _selectionRevision) {
+        _selectedAddress = savedAddress?.isNotEmpty == true ? savedAddress : null;
+      }
+      _updateAddress();
       await _refreshState();
+      await _refreshWifiDiscoveryPermission();
     } catch (failure) {
       error = failure.toString();
     }
     _notify();
+  }
+
+  void _updateAddress() {
+    // Native owns the identity of active hardware. While idle, a user's saved
+    // selection wins over the native plugin's separately remembered address.
+    address = connected || connecting || sessionActive
+        ? _nativeAddress
+        : _selectedAddress ?? _nativeAddress;
   }
 
   Future<void> _refreshState() async {
@@ -130,8 +150,9 @@ class EyevueController extends ChangeNotifier {
       _androidSdkInt = (state['androidSdkInt']! as num).toInt();
     }
     if (state['address'] is String && (state['address']! as String).isNotEmpty) {
-      address = state['address']! as String;
+      _nativeAddress = state['address']! as String;
     }
+    _updateAddress();
     if (state['devices'] is List) {
       final Map<String, EyevueDevice> discovered = <String, EyevueDevice>{};
       for (final Object? value in state['devices']! as List<Object?>) {
@@ -180,6 +201,35 @@ class EyevueController extends ChangeNotifier {
     }
   }
 
+  Future<void> _refreshWifiDiscoveryPermission() async {
+    try {
+      wifiDiscoveryPermissionGranted = await _permissions.hasWifiDiscoveryPermission();
+      wifiDiscoveryLocationEnabled = await _permissions.isWifiDiscoveryLocationEnabled();
+      wifiDiscoveryStatus = !wifiDiscoveryPermissionGranted
+          ? 'Discovery permission not enabled; standard photo transfer remains available.'
+          : wifiDiscoveryLocationEnabled
+              ? 'Discovery permission enabled'
+              : 'Discovery permission enabled. Location services are off; standard photo transfer remains available.';
+    } catch (_) {
+      wifiDiscoveryPermissionGranted = false;
+      wifiDiscoveryLocationEnabled = false;
+      wifiDiscoveryStatus = 'Discovery permission could not be checked; standard photo transfer remains available.';
+    }
+  }
+
+  Future<void> improveWifiDiscovery() => _run(() async {
+        try {
+          await _permissions.requestWifiDiscoveryPermission();
+          if (!_disposed) {
+            await _refreshWifiDiscoveryPermission();
+          }
+        } catch (_) {
+          wifiDiscoveryPermissionGranted = false;
+          wifiDiscoveryLocationEnabled = false;
+          wifiDiscoveryStatus = 'Discovery permission could not be requested; standard photo transfer remains available.';
+        }
+      });
+
   Future<void> scan() => _run(() async {
         await _permissions.requestBluetooth(_androidSdkInt);
         if (!_disposed) {
@@ -194,7 +244,9 @@ class EyevueController extends ChangeNotifier {
           throw StateError('Disconnect EyeVue before selecting another device.');
         }
         await _settings.saveAddress(selectedAddress);
-        address = selectedAddress;
+        _selectionRevision++;
+        _selectedAddress = selectedAddress;
+        _updateAddress();
       });
 
   Future<void> connect() => _run(() async {

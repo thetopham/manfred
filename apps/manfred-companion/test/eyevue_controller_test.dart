@@ -23,6 +23,7 @@ class FakeBridge implements EyevueBridge {
   int stops = 0;
   int captures = 0;
   int scans = 0;
+  String? lastConnectedAddress;
   Object? startFailure;
   bool failRefreshAfterStart = false;
   bool stopCompletes = false;
@@ -52,6 +53,7 @@ class FakeBridge implements EyevueBridge {
   Future<void> stopScan() async {}
   @override
   Future<void> connect(String address) async {
+    lastConnectedAddress = address;
     emitState(<String, Object?>{'connected': true, 'address': address});
   }
   @override
@@ -83,8 +85,9 @@ class FakeBridge implements EyevueBridge {
 
 class FakeSettings implements EyevueSettings {
   String? value;
+  Completer<String?>? pendingLoad;
   @override
-  Future<String?> loadAddress() async => value;
+  Future<String?> loadAddress() async => pendingLoad == null ? value : await pendingLoad!.future;
   @override
   Future<void> saveAddress(String address) async { value = address; }
 }
@@ -93,6 +96,25 @@ class FakePermissions implements EyevuePermissionGate {
   Object? sessionFailure;
   Completer<void>? pending;
   int? lastSdk;
+  int wifiDiscoveryRequests = 0;
+  bool wifiDiscoveryGranted = false;
+  bool wifiDiscoveryLocationEnabled = true;
+  bool grantWifiDiscoveryOnRequest = false;
+  Object? wifiDiscoveryFailure;
+  @override
+  Future<bool> hasWifiDiscoveryPermission() async {
+    if (wifiDiscoveryFailure != null) throw wifiDiscoveryFailure!;
+    return wifiDiscoveryGranted;
+  }
+  @override
+  Future<bool> requestWifiDiscoveryPermission() async {
+    wifiDiscoveryRequests++;
+    if (wifiDiscoveryFailure != null) throw wifiDiscoveryFailure!;
+    if (grantWifiDiscoveryOnRequest) wifiDiscoveryGranted = true;
+    return wifiDiscoveryGranted;
+  }
+  @override
+  Future<bool> isWifiDiscoveryLocationEnabled() async => wifiDiscoveryLocationEnabled;
   @override
   Future<void> requestBluetooth(int? androidSdkInt) async { lastSdk = androidSdkInt; }
   @override
@@ -151,6 +173,71 @@ void main() {
     await initialization;
     expect(controller.connected, isFalse);
     expect(controller.status, 'Disconnected');
+  });
+
+  test('saved selection wins over an idle native remembered address and connects to it', () async {
+    settings.value = 'device-B';
+    bridge.state = <String, Object?>{...bridge.state, 'connected': false, 'address': 'device-A'};
+    await controller.initialize();
+    expect(controller.address, 'device-B');
+    bridge.emitState(<String, Object?>{'address': 'device-A'});
+    expect(controller.address, 'device-B');
+    await controller.connect();
+    expect(bridge.lastConnectedAddress, 'device-B');
+    expect(controller.address, 'device-B');
+  });
+
+  test('active native hardware stays authoritative without losing the idle selection', () async {
+    settings.value = 'device-B';
+    bridge.state = <String, Object?>{...bridge.state, 'address': 'device-A'};
+    await controller.initialize();
+    expect(controller.connected, isTrue);
+    expect(controller.address, 'device-A');
+    expect(settings.value, 'device-B');
+    bridge.emitState(<String, Object?>{'connected': false, 'connecting': true});
+    expect(controller.address, 'device-A');
+    bridge.emitState(<String, Object?>{'connecting': false, 'sessionActive': true});
+    expect(controller.address, 'device-A');
+    bridge.emitState(<String, Object?>{'sessionActive': false});
+    expect(controller.address, 'device-B');
+    await controller.connect();
+    expect(bridge.lastConnectedAddress, 'device-B');
+  });
+
+  test('a new user selection wins over a slower saved-selection load', () async {
+    settings.pendingLoad = Completer<String?>();
+    bridge.state = <String, Object?>{...bridge.state, 'connected': false, 'address': 'device-A'};
+    final Future<void> initialization = controller.initialize();
+    await settle();
+    await controller.selectDevice('device-B');
+    settings.pendingLoad!.complete('device-A');
+    await initialization;
+    expect(settings.value, 'device-B');
+    expect(controller.address, 'device-B');
+    await controller.connect();
+    expect(bridge.lastConnectedAddress, 'device-B');
+  });
+
+  test('native address events stay authoritative across delayed settings and state replies', () async {
+    settings.pendingLoad = Completer<String?>();
+    final Future<void> initialization = controller.initialize();
+    await settle();
+    bridge.emitState(<String, Object?>{'address': 'device-A'});
+    expect(controller.address, 'device-A');
+    bridge.delayedState = Completer<EyevueMap>();
+    settings.pendingLoad!.complete('device-B');
+    await settle();
+    expect(controller.address, 'device-A');
+    bridge.emitState(<String, Object?>{'address': 'device-C'});
+    bridge.delayedState!.complete(<String, Object?>{
+      'connected': false, 'sessionActive': false, 'address': 'device-A',
+    });
+    await initialization;
+    expect(controller.connected, isTrue);
+    expect(controller.address, 'device-C');
+    bridge.delayedState = null;
+    bridge.emitState(<String, Object?>{'connected': false});
+    expect(controller.address, 'device-B');
   });
 
   test('stop keeps foreground ownership until native cleanup completes', () async {
@@ -269,6 +356,70 @@ void main() {
     expect(acquired, 0);
     expect(bridge.starts, 0);
     expect(controller.error, contains('permission denied'));
+  });
+
+  test('normal initialize scan connect and start never prompt for optional discovery', () async {
+    await controller.initialize();
+    await controller.scan();
+    await controller.connect();
+    await controller.startSession();
+    expect(permissions.wifiDiscoveryRequests, 0);
+    expect(controller.wifiDiscoveryPermissionGranted, isFalse);
+    expect(bridge.starts, 1);
+    expect(acquired, 1);
+  });
+
+  test('explicit discovery action reports permission without starting a session', () async {
+    await controller.initialize();
+    permissions.grantWifiDiscoveryOnRequest = true;
+    await controller.improveWifiDiscovery();
+    expect(permissions.wifiDiscoveryRequests, 1);
+    expect(controller.wifiDiscoveryPermissionGranted, isTrue);
+    expect(controller.wifiDiscoveryLocationEnabled, isTrue);
+    expect(controller.wifiDiscoveryStatus, 'Discovery permission enabled');
+    expect(controller.status, 'Connected');
+    expect(bridge.starts, 0);
+    expect(acquired, 0);
+  });
+
+  test('declined optional discovery permission keeps standard sessions available', () async {
+    await controller.initialize();
+    await controller.improveWifiDiscovery();
+    expect(permissions.wifiDiscoveryRequests, 1);
+    expect(controller.wifiDiscoveryPermissionGranted, isFalse);
+    expect(controller.wifiDiscoveryStatus, contains('standard photo transfer remains available'));
+    expect(controller.error, isNull);
+    expect(controller.canStart, isTrue);
+    await controller.startSession();
+    expect(bridge.starts, 1);
+    expect(permissions.wifiDiscoveryRequests, 1);
+  });
+
+  test('location services off do not block standard photo sessions', () async {
+    permissions.wifiDiscoveryGranted = true;
+    permissions.wifiDiscoveryLocationEnabled = false;
+    await controller.initialize();
+    expect(controller.wifiDiscoveryPermissionGranted, isTrue);
+    expect(controller.wifiDiscoveryLocationEnabled, isFalse);
+    expect(controller.wifiDiscoveryStatus, contains('Location services are off'));
+    expect(controller.canStart, isTrue);
+    await controller.startSession();
+    expect(bridge.starts, 1);
+    expect(permissions.wifiDiscoveryRequests, 0);
+  });
+
+  test('optional discovery permission errors stay separate from session errors', () async {
+    permissions.wifiDiscoveryFailure = StateError('permission service unavailable');
+    await controller.initialize();
+    expect(controller.connected, isTrue);
+    expect(controller.error, isNull);
+    expect(controller.wifiDiscoveryStatus, contains('could not be checked'));
+    await controller.improveWifiDiscovery();
+    expect(controller.error, isNull);
+    expect(controller.wifiDiscoveryStatus, contains('could not be requested'));
+    await controller.startSession();
+    expect(bridge.starts, 1);
+    expect(controller.error, isNull);
   });
 
   test('concurrent start attempts share the busy boundary', () async {

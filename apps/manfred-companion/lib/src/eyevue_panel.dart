@@ -163,6 +163,19 @@ class _EyevuePanelState extends State<EyevuePanel> {
                       ),
                     ],
                   ),
+                  TextButton.icon(
+                    onPressed: state.busy || state.connecting ? null : state.improveWifiDiscovery,
+                    icon: const Icon(Icons.wifi_find),
+                    label: const Text('Improve Wi-Fi discovery'),
+                  ),
+                  Text(
+                    'Optional: Android requires Precise location permission and Location services '
+                    'to identify the glasses Wi-Fi access point. Manfred does not read GPS coordinates. '
+                    'Faster connections are still being tested.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  if (state.wifiDiscoveryStatus != null)
+                    Text(state.wifiDiscoveryStatus!, style: Theme.of(context).textTheme.bodySmall),
                   if (state.busy) const LinearProgressIndicator(),
                   if (image != null) ...<Widget>[
                     const SizedBox(height: 12),

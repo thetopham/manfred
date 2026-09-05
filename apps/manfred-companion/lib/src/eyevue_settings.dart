@@ -22,9 +22,28 @@ class SharedPreferencesEyevueSettings implements EyevueSettings {
 abstract interface class EyevuePermissionGate {
   Future<void> requestBluetooth(int? androidSdkInt);
   Future<void> requestSession(int? androidSdkInt);
+  Future<bool> hasWifiDiscoveryPermission();
+  Future<bool> requestWifiDiscoveryPermission();
+  Future<bool> isWifiDiscoveryLocationEnabled();
 }
 
 class AndroidEyevuePermissionGate implements EyevuePermissionGate {
+  @override
+  Future<bool> hasWifiDiscoveryPermission() async =>
+      (await Permission.locationWhenInUse.status).isGranted;
+
+  @override
+  Future<bool> requestWifiDiscoveryPermission() async {
+    await Permission.locationWhenInUse.request();
+    // Recheck both manifest permissions: a request callback may reflect only
+    // coarse location, which cannot authorize Wi-Fi scan results on Android.
+    return hasWifiDiscoveryPermission();
+  }
+
+  @override
+  Future<bool> isWifiDiscoveryLocationEnabled() async =>
+      (await Permission.locationWhenInUse.serviceStatus).isEnabled;
+
   Future<void> _request(List<Permission> permissions) async {
     final Map<Permission, PermissionStatus> result = await permissions.request();
     if (result.entries.any(
