@@ -30,6 +30,12 @@ Acceptance for **0.5.1 Capture and fetch** is two successive offline captures, e
 
 **Alternate startup (experimental)** starts the vendor live AP mode and then attempts the same new-photo retrieval. It sends one live command and waits for the asynchronous SSID report, without the duplicate media-start requests found in CyanBridge. It does not start or decode video. A previous live-preview test reached RTSP but CyanBridge's Media3 parser rejected the vendor SDP line `a=decode_buf=300`; no stream dimensions were measured.
 
+## While ChatGPT is visible
+
+Start the Manfred photo session before switching to ChatGPT. Android 16 accepts a Wi-Fi network request from an app with an active foreground service; Eyes keeps its connected-device service lease across the capture/fetch cycle. An exact SSID/security request can reuse remembered approval, but Android can still show its connection dialog when approval is missing or a second Wi-Fi interface is unavailable. This is platform eligibility, not a verified background-capture result. See [Android approval behavior](https://developer.android.com/develop/connectivity/wifi/wifi-bootstrap#bypassing-user-approval) and the [Android 16 Wi-Fi request policy](https://android.googlesource.com/platform/packages/modules/Wifi/+/refs/heads/android16-release/service/java/com/android/server/wifi/WifiNetworkFactory.java).
+
+Hardware acceptance must include two physical-shutter captures with ChatGPT foreground, return to Ready, readable full-resolution saves, and any connection prompts or voice/internet interruption. Repeat with the intended home Wi-Fi/VPN setup. Ordinary app switching does not explicitly stop the session; destruction of Manfred's Activity/Flutter engine currently disposes EyeVue, so process/activity recreation is not a durable recovery mechanism yet.
+
 ## Tasker handoff
 
 After a successful complete local JPEG save, the native component emits an `imageReady` event to Flutter and a package-scoped `com.thetopham.manfred_companion.EYEVUE_IMAGE_READY` broadcast to `net.dinglisch.android.taskerm`. The event carries a gallery URI and integrity/dimension/session metadata. Only Tasker receives the granted URI access. A missing Tasker installation does not discard a saved image.

@@ -18,6 +18,8 @@ Engineering evidence recorded **2026-09-05**. This profile supports Manfred Comp
 
 The family label comes from the [E09 research repository](https://github.com/sctg-development/ai-smart-glasses-e09/tree/c32e065ebbea769184df5abda9e43774631e1eca), not a verified bill of materials. The phone model mapping is supported by [Samsung's SM-S936U page](https://doc.samsungmobile.com/SM-S936U/032308250214/eng.html). Image dimensions and device identity are summarized physical-test observations; no private photographs, MAC addresses, SSID suffixes, serials, or raw diagnostic logs are included here.
 
+The 320 x 180 observation is not a hardcoded pixel limit in Manfred's BLE assembler: its transfer guards are byte/chunk limits, and it accepts a declared payload up to 32 MiB. That establishes that the app does not resize every BLE image to 320 x 180; it does not demonstrate that this firmware can supply a higher-resolution image over BLE. A supported alternate command or compatible firmware would still have to produce those bytes.
+
 ## Transport profile used by Manfred
 
 | Path | TK8 evidence and implementation |

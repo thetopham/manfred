@@ -123,7 +123,7 @@ class _EyevuePanelState extends State<EyevuePanel> {
                     isExpanded: true,
                     items: const <DropdownMenuItem<String>>[
                       DropdownMenuItem<String>(value: 'media', child: Text('Keep Wi-Fi open (experimental)')),
-                      DropdownMenuItem<String>(value: 'capture', child: Text('Capture and fetch (experimental'))),
+                      DropdownMenuItem<String>(value: 'capture', child: Text('Capture and fetch (experimental)')),
                       DropdownMenuItem<String>(value: 'live', child: Text('Alternate startup (experimental)')),
                     ],
                     onChanged: state.busy || state.sessionActive
