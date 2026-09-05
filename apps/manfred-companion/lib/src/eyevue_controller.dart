@@ -42,6 +42,11 @@ class EyevueController extends ChangeNotifier {
   String? address;
   List<EyevueDevice> devices = <EyevueDevice>[];
   EyevueImage? latestImage;
+  EyevueFirmware? firmware;
+  String firmwareStatus = 'not_read';
+  String? firmwareError;
+  String? project;
+  String? customer;
   Stream<EyevueImage> get images => _images.stream;
   bool get canStart => connected && !connecting && !busy && !sessionActive && !_foregroundHeld;
   bool get canCapture => connected && sessionActive && ready && !busy;
@@ -104,6 +109,15 @@ class EyevueController extends ChangeNotifier {
       status = state['status']! as String;
     }
     error = state['error'] is String ? state['error']! as String : null;
+    if (state.containsKey('firmware')) {
+      firmware = EyevueFirmware.tryParse(state['firmware']);
+    }
+    if (state['firmwareStatus'] is String) {
+      firmwareStatus = state['firmwareStatus']! as String;
+    }
+    firmwareError = state['firmwareError'] is String ? state['firmwareError']! as String : null;
+    project = state['project'] is String ? state['project']! as String : null;
+    customer = state['customer'] is String ? state['customer']! as String : null;
     if (state['androidSdkInt'] is num) {
       _androidSdkInt = (state['androidSdkInt']! as num).toInt();
     }

@@ -193,6 +193,29 @@ void main() {
     expect(released, 0);
   });
 
+  test('optional firmware metadata and its failure stay separate from connection state', () async {
+    await controller.initialize();
+    bridge.emitState(<String, Object?>{
+      'project': 'TK8',
+      'customer': '0201',
+      'firmwareStatus': 'available',
+      'firmware': <String, Object?>{'btVersion': '1.2.3', 'ispVersion': '4.5.6', 'deviceVersion': '7'},
+    });
+    expect(controller.firmware?.btVersion, '1.2.3');
+    expect(controller.firmware?.ispVersion, '4.5.6');
+    expect(controller.project, 'TK8');
+    bridge.emitState(<String, Object?>{
+      'firmware': null,
+      'firmwareStatus': 'unavailable',
+      'firmwareError': 'Version query timed out',
+    });
+    expect(controller.firmware, isNull);
+    expect(controller.connected, isTrue);
+    expect(controller.error, isNull);
+    expect(controller.firmwareError, 'Version query timed out');
+    expect(controller.canStart, isTrue);
+  });
+
   test('permission denial never acquires service or starts native capture', () async {
     await controller.initialize();
     permissions.sessionFailure = StateError('permission denied');

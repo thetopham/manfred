@@ -22,6 +22,12 @@ data class EyevueCustomer(
     val customer: String,
 )
 
+data class EyevueDeviceInfo(
+    val btVersion: String,
+    val ispVersion: String,
+    val deviceVersion: String,
+)
+
 data class EyevueVoiceAssistantStatus(
     val localOfflineSpeechEnabled: Boolean,
     val aiWakeWordEnabled: Boolean,
@@ -265,6 +271,19 @@ object EyevueProtocol {
         return EyevueCustomer(
             project = readPart(0),
             customer = readPart(4),
+        )
+    }
+
+
+    /** Vendor 0x55 reply: three BT bytes, three ISP bytes, then one device-version byte. */
+    fun parseDeviceInfo(frame: EyevueFrame): EyevueDeviceInfo? {
+        if (frame.commandId != CMD_GET_DEVICE_INFO || frame.payload.size < 7) return null
+        fun version(offset: Int): String =
+            (offset until offset + 3).joinToString(".") { (frame.payload[it].toInt() and 0xff).toString() }
+        return EyevueDeviceInfo(
+            btVersion = version(0),
+            ispVersion = version(3),
+            deviceVersion = (frame.payload[6].toInt() and 0xff).toString(),
         )
     }
 

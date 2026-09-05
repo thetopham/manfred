@@ -65,6 +65,24 @@ class EyevueDevice {
   final int rssi;
 }
 
+class EyevueFirmware {
+  const EyevueFirmware({required this.btVersion, required this.ispVersion, required this.deviceVersion});
+  final String btVersion;
+  final String ispVersion;
+  final String deviceVersion;
+
+  static EyevueFirmware? tryParse(Object? value) {
+    final EyevueMap map = eyevueMap(value);
+    final Object? bt = map['btVersion'];
+    final Object? isp = map['ispVersion'];
+    final Object? device = map['deviceVersion'];
+    if (bt is! String || bt.isEmpty || isp is! String || isp.isEmpty || device is! String || device.isEmpty) {
+      return null;
+    }
+    return EyevueFirmware(btVersion: bt, ispVersion: isp, deviceVersion: device);
+  }
+}
+
 class EyevueImage {
   const EyevueImage({
     required this.id,

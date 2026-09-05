@@ -22,6 +22,7 @@ class _EyevuePanelState extends State<EyevuePanel> {
         builder: (BuildContext context, Widget? child) {
           final EyevueController state = widget.controller;
           final EyevueImage? image = state.latestImage;
+          final EyevueFirmware? firmware = state.firmware;
           final String? address = state.address;
           final List<EyevueDevice> devices = <EyevueDevice>[
             ...state.devices,
@@ -49,6 +50,15 @@ class _EyevuePanelState extends State<EyevuePanel> {
                   Text(state.status),
                   if (state.ready) const Text('Ready — try the glasses shutter or Take photo.'),
                   if (address != null) Text(address, style: Theme.of(context).textTheme.bodySmall),
+                  if (state.project != null)
+                    Text('Hardware: ${state.project} / ${state.customer ?? "unknown"}'),
+                  if (firmware != null)
+                    Text('Firmware: BT ${firmware.btVersion} · ISP ${firmware.ispVersion} · device ${firmware.deviceVersion}'),
+                  if (state.firmwareStatus == 'reading') const Text('Reading firmware versions…'),
+                  if (state.firmwareStatus == 'unavailable')
+                    Text(state.connected
+                        ? 'Firmware versions unavailable; Bluetooth remains connected.'
+                        : 'Firmware versions unavailable.'),
                   if (state.error != null)
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,

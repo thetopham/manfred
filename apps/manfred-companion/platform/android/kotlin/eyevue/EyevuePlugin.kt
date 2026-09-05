@@ -70,6 +70,11 @@ class EyevuePlugin(
     private var error: String? = null
     private var address: String? = preferences.getString("address", null)
     private var customer: EyevueCustomer? = null
+    private var firmware: EyevueDeviceInfo? = null
+    private var firmwareStatus = "not_read"
+    private var firmwareError: String? = null
+    private var firmwareGeneration = 0L
+    private var firmwareJob: Job? = null
     private var latestImage: Map<String, Any?>? = null
     private var connectionJob: Job? = null
     private var sessionJob: Job? = null
@@ -152,6 +157,13 @@ class EyevuePlugin(
         "devices" to devices.values.toList(),
         "latestImage" to latestImage,
         "sessionId" to sessionId,
+        "project" to customer?.project,
+        "customer" to customer?.customer,
+        "firmware" to firmware?.let {
+            linkedMapOf("btVersion" to it.btVersion, "ispVersion" to it.ispVersion, "deviceVersion" to it.deviceVersion)
+        },
+        "firmwareStatus" to firmwareStatus,
+        "firmwareError" to firmwareError,
     )
 
     private fun emitState() {
@@ -248,6 +260,12 @@ class EyevuePlugin(
         require(BluetoothAdapter.checkBluetoothAddress(normalized)) { "Select a valid Bluetooth address" }
         check(!connecting && !disconnecting && !sessionActive) { "Stop the current operation before connecting" }
         stopScan()
+        firmwareGeneration++
+        firmwareJob?.cancel()
+        firmwareJob = null
+        firmware = null
+        firmwareStatus = "not_read"
+        firmwareError = null
         gatt.disconnect()
         customer = null
         address = normalized
@@ -262,6 +280,7 @@ class EyevuePlugin(
                 customer = awaitCustomer()
                 currentCoroutineContext().ensureActive()
                 preferences.edit().putString("address", normalized).apply()
+                readFirmwareInfo()
                 status = "Connected - ${customer?.project ?: "EyeVue"}"
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -277,6 +296,54 @@ class EyevuePlugin(
         }
         connectionJob = job
         job.start()
+    }
+
+
+    /** Optional device information; never changes firmware and never fails a valid BLE connection. */
+    private fun readFirmwareInfo() {
+        firmwareJob?.cancel()
+        val generation = firmwareGeneration
+        firmwareStatus = "reading"
+        firmwareError = null
+        emitState()
+        lateinit var owned: Job
+        owned = scope.launch(start = CoroutineStart.LAZY) {
+            try {
+                val info = withTimeoutOrNull(3_000L) {
+                    coroutineScope {
+                        val reply = async(start = CoroutineStart.UNDISPATCHED) {
+                            EyevueProtocol.parseDeviceInfo(gatt.frames.first {
+                                EyevueProtocol.parseDeviceInfo(it) != null
+                            })!!
+                        }
+                        try {
+                            gatt.write(EyevueProtocol.buildGetDeviceInfoPacket()).getOrThrow()
+                            currentCoroutineContext().ensureActive()
+                            reply.await()
+                        } finally {
+                            reply.cancel()
+                        }
+                    }
+                }
+                if (generation != firmwareGeneration) return@launch
+                firmware = info
+                firmwareStatus = if (info == null) "unavailable" else "available"
+                firmwareError = if (info == null) "No firmware response within 3 seconds" else null
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                if (generation == firmwareGeneration) {
+                    firmware = null
+                    firmwareStatus = "unavailable"
+                    firmwareError = failure.message ?: "The optional firmware query was unavailable"
+                }
+            } finally {
+                if (firmwareJob === owned) firmwareJob = null
+                if (generation == firmwareGeneration) emitState()
+            }
+        }
+        firmwareJob = owned
+        owned.start()
     }
 
     private suspend fun awaitCustomer(): EyevueCustomer = coroutineScope {
@@ -727,10 +794,17 @@ class EyevuePlugin(
     private fun disconnect() {
         if (disconnecting) return
         disconnecting = true
+        firmwareGeneration++
+        if (firmwareStatus == "reading") {
+            firmwareStatus = "not_read"
+            firmwareError = null
+        }
         stopScan()
         stopSession()
         scope.launch {
             try {
+                firmwareJob?.cancelAndJoin()
+                firmwareJob = null
                 connectionJob?.cancelAndJoin()
                 captureJob?.cancelAndJoin()
                 sessionJob?.cancelAndJoin()
@@ -781,6 +855,8 @@ class EyevuePlugin(
         sink = null
         scope.launch {
             try {
+                firmwareJob?.cancelAndJoin()
+                firmwareJob = null
                 connectionJob?.cancelAndJoin()
                 captureJob?.cancelAndJoin()
                 sessionJob?.cancelAndJoin()

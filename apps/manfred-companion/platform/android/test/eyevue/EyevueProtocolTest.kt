@@ -7,6 +7,44 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class EyevueProtocolTest {
+
+    @Test
+    fun deviceInfoReadUsesVendorGetCommandAndParsesIncomingFixture() {
+        assertArrayEquals(
+            byteArrayOf(0xAB.toByte(), 0x55, 0, 3, 0x55, 0, 0x55),
+            EyevueProtocol.buildGetDeviceInfoPacket(),
+        )
+        val response = byteArrayOf(
+            0xAC.toByte(), 0x55, 0, 9, 0x55, 1, 2, 3, 4, 5, 6, 7, 0x71,
+        )
+        assertEquals(
+            EyevueDeviceInfo("1.2.3", "4.5.6", "7"),
+            EyevueProtocol.parseDeviceInfo(EyevueProtocol.parseDatagram(response)),
+        )
+    }
+
+    @Test
+    fun deviceInfoVersionsAreUnsignedAndIgnoreExtensionBytes() {
+        val response = EyevueFrame(
+            EyevueProtocol.CMD_GET_DEVICE_INFO,
+            byteArrayOf(0xff.toByte(), 0x80.toByte(), 0, 1, 2, 0xfe.toByte(), 0xff.toByte(), 9),
+        )
+        assertEquals(
+            EyevueDeviceInfo("255.128.0", "1.2.254", "255"),
+            EyevueProtocol.parseDeviceInfo(response),
+        )
+    }
+
+    @Test
+    fun deviceInfoRequiresCorrectReplyAndSevenPayloadBytes() {
+        assertEquals(null, EyevueProtocol.parseDeviceInfo(EyevueFrame(0x65, ByteArray(7))))
+        for (length in 0 until 7) {
+            assertEquals(
+                null,
+                EyevueProtocol.parseDeviceInfo(EyevueFrame(EyevueProtocol.CMD_GET_DEVICE_INFO, ByteArray(length))),
+            )
+        }
+    }
     @Test
     fun livePacketsMatchVendorFrames() {
         assertArrayEquals(
