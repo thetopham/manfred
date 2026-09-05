@@ -23,6 +23,37 @@ cp "$SOURCE_DIR/platform/android/AndroidManifest.xml" "$DESTINATION/android/app/
 mkdir -p "$DESTINATION/android/app/src/main/res/xml"
 cp "$SOURCE_DIR/platform/android/network_security_config.xml" \
   "$DESTINATION/android/app/src/main/res/xml/network_security_config.xml"
+# Keep native EyeVue source in the checked-in overlay, not generated Flutter files.
+if [[ -d "$SOURCE_DIR/platform/android/kotlin" ]]; then
+  mkdir -p "$DESTINATION/android/app/src/main/kotlin/com/thetopham/manfred_companion"
+  cp -R "$SOURCE_DIR/platform/android/kotlin/." \
+    "$DESTINATION/android/app/src/main/kotlin/com/thetopham/manfred_companion/"
+fi
+if [[ -d "$SOURCE_DIR/platform/android/test" ]]; then
+  mkdir -p "$DESTINATION/android/app/src/test/kotlin/com/thetopham/manfred_companion"
+  cp -R "$SOURCE_DIR/platform/android/test/." \
+    "$DESTINATION/android/app/src/test/kotlin/com/thetopham/manfred_companion/"
+fi
+python3 - "$DESTINATION/android/app/build.gradle.kts" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+s = p.read_text()
+marker = "minSdk = flutter.minSdkVersion"
+if s.count(marker) != 1:
+    raise SystemExit("Unexpected Flutter minSdk template; refusing to guess")
+s = s.replace(marker, "minSdk = 29")
+s += """
+// EyeVue BLE, coroutine lifecycle, and sockets scoped to the glasses network.
+dependencies {
+    implementation("androidx.core:core-ktx:1.16.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    testImplementation("junit:junit:4.13.2")
+}
+"""
+p.write_text(s)
+PY
 (
   cd "$DESTINATION"
   flutter pub get

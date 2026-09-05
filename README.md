@@ -1,6 +1,6 @@
 # Manfred
 
-Manfred is the app and its services: the wearable Companion client, Ears audio/transcription, and existing visual evidence capture. Eyes through CyanBridge are planned. This extraction adds no new capture capability and activates no workers or services.
+Manfred is the app and its services: the wearable Companion client, Ears audio/transcription, and existing visual evidence capture. The companion now includes an experimental EyeVue photo session; see [EyeVue photos](docs/eyevue-photos.md) for setup and [the E09-family hardware profile](docs/hardware/eyevue-e09.md) for the tested TK8/0201 device, firmware interfaces, and measured capabilities. It activates no backend workers or services.
 
 ## Ownership
 
@@ -24,6 +24,8 @@ python3 -m venv .venv
 ```
 
 Full ASR runtime dependencies are in `requirements.txt`; optional Parakeet dependencies remain separate in `requirements-parakeet.txt`. Python tests use synthetic inputs and do not require GPUs or live archives. Android changes additionally require `scripts/validate_android_local.py` with Flutter/Android tools. Device installation and physical capture acceptance remain separate; retain the stable signing identity and require `--require-stable-signing` for an installable update. Signing material is not included here.
+
+Android CI is owned by this repository's [Manfred Android workflow](.github/workflows/android.yml). Pull requests run validation without signing secrets. Main, the explicit EyeVue testing branch, and manual runs produce a stable-signed APK with its source commit and SHA-256 receipt. The signing identity is preserved from the earlier app; no recurring Idle or Fleet work is part of this workflow.
 
 ## Runtime plan and later cutover
 

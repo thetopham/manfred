@@ -2,18 +2,28 @@ import 'package:flutter/material.dart';
 
 import 'src/bridge_controller.dart';
 import 'src/omi_ble_transport.dart';
+import 'src/foreground_service.dart';
+import 'src/eyevue_controller.dart';
+import 'src/eyevue_panel.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final BridgeController controller = BridgeController();
+  final ForegroundBridgeService foreground = ForegroundBridgeService();
+  final BridgeController controller = BridgeController(foregroundService: foreground);
   await controller.initialize();
-  runApp(ManfredCompanionApp(controller: controller));
+  final EyevueController eyes = EyevueController(
+    acquireForeground: () => foreground.acquire('eyes'),
+    releaseForeground: () => foreground.release('eyes'),
+  );
+  await eyes.initialize();
+  runApp(ManfredCompanionApp(controller: controller, eyevueController: eyes));
 }
 
 class ManfredCompanionApp extends StatelessWidget {
-  const ManfredCompanionApp({super.key, required this.controller});
+  const ManfredCompanionApp({super.key, required this.controller, this.eyevueController});
 
   final BridgeController controller;
+  final EyevueController? eyevueController;
 
   @override
   Widget build(BuildContext context) {
@@ -23,15 +33,16 @@ class ManfredCompanionApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff5d7c6f)),
         useMaterial3: true,
       ),
-      home: CompanionHome(controller: controller),
+      home: CompanionHome(controller: controller, eyevueController: eyevueController),
     );
   }
 }
 
 class CompanionHome extends StatefulWidget {
-  const CompanionHome({super.key, required this.controller});
+  const CompanionHome({super.key, required this.controller, this.eyevueController});
 
   final BridgeController controller;
+  final EyevueController? eyevueController;
 
   @override
   State<CompanionHome> createState() => _CompanionHomeState();
@@ -137,6 +148,12 @@ class _CompanionHomeState extends State<CompanionHome> {
           body: ListView(
             padding: const EdgeInsets.all(16),
             children: <Widget>[
+              if (widget.eyevueController != null) ...<Widget>[
+                EyevuePanel(controller: widget.eyevueController!),
+                const SizedBox(height: 20),
+                const Divider(),
+                const SizedBox(height: 12),
+              ],
               const Text(
                 'Omi → S25 → Tailscale → Demerzel',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),

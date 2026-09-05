@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Mapping
 
@@ -167,6 +168,11 @@ def main() -> int:
                 ("analyze", (flutter, "analyze"), project),
                 ("test", (flutter, "test"), project),
                 (
+                    "native EyeVue tests",
+                    ("bash", "./gradlew", "--no-daemon", ":app:testDebugUnitTest"),
+                    project / "android",
+                ),
+                (
                     "debug APK build",
                     (flutter, "build", "apk", "--debug", "--target-platform", "android-arm64"),
                     project,
@@ -176,6 +182,16 @@ def main() -> int:
                 exit_code = run(label, command, cwd, env=validation_env)
                 if exit_code != 0:
                     return exit_code
+                if label == "native EyeVue tests":
+                    reports = list(project.glob("build/app/test-results/testDebugUnitTest/TEST-*.xml"))
+                    totals = {name: 0 for name in ("tests", "failures", "errors", "skipped")}
+                    for report in reports:
+                        result = ET.parse(report).getroot()
+                        for name in totals:
+                            totals[name] += int(result.attrib.get(name, "0"))
+                    if not reports or totals["tests"] == 0:
+                        raise RuntimeError("Native EyeVue test reports were not produced")
+                    print("MANFRED_NATIVE_TESTS " + " ".join(f"{key}={value}" for key, value in totals.items()), flush=True)
             apk = project / "build/app/outputs/flutter-apk/app-debug.apk"
             if not apk.is_file():
                 raise RuntimeError("Flutter reported success but app-debug.apk is missing")

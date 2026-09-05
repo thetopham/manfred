@@ -1,0 +1,112 @@
+name: Manfred Android
+
+on:
+  pull_request:
+    paths:
+      - 'apps/manfred-companion/**'
+      - 'scripts/validate_android_local.py'
+      - '.github/workflows/android.yml'
+  push:
+    # The explicit feature branch supports signed testing before the first merge.
+    branches: [main, 'feat/eyevue-photo-session']
+    paths:
+      - 'apps/manfred-companion/**'
+      - 'scripts/validate_android_local.py'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: manfred-android-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.1'
+          cache: true
+      - name: Analyze, test, and build an ephemeral validation APK
+        run: python3 scripts/validate_android_local.py --output "$RUNNER_TEMP/manfred-companion-ephemeral.apk"
+      - name: Upload the validation artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: manfred-companion-ephemeral-${{ github.sha }}
+          path: ${{ runner.temp }}/manfred-companion-ephemeral.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  build-stable:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.1'
+          cache: true
+      - name: Analyze, test Flutter and native EyeVue, build, and verify signer
+        env:
+          MANFRED_ANDROID_KEYSTORE_BASE64: ${{ secrets.MANFRED_ANDROID_KEYSTORE_BASE64 }}
+          MANFRED_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.MANFRED_ANDROID_KEYSTORE_PASSWORD }}
+          MANFRED_ANDROID_KEY_PASSWORD: ${{ secrets.MANFRED_ANDROID_KEY_PASSWORD }}
+          MANFRED_ANDROID_KEY_ALIAS: ${{ secrets.MANFRED_ANDROID_KEY_ALIAS }}
+        run: python3 scripts/validate_android_local.py --require-stable-signing --output "$RUNNER_TEMP/manfred-companion.apk"
+      - name: Record artifact integrity and source
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, subprocess
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          apk = root / 'manfred-companion.apk'
+          digest = hashlib.sha256(apk.read_bytes()).hexdigest()
+          (root / 'manfred-companion.apk.sha256').write_text(digest + '  manfred-companion.apk\n')
+          provenance = {
+              'repository': os.environ['GITHUB_REPOSITORY'],
+              'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+              'ref': os.environ['GITHUB_REF'],
+              'run_id': os.environ['GITHUB_RUN_ID'],
+              'stable_signed': True,
+              'apk_sha256': digest,
+          }
+          (root / 'source-provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
+          PY
+      - name: Upload stable APK and source receipt
+        uses: actions/upload-artifact@v7
+        with:
+          name: manfred-companion-stable-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/manfred-companion.apk
+            ${{ runner.temp }}/manfred-companion.apk.sha256
+            ${{ runner.temp }}/source-provenance.json
+          if-no-files-found: error
+          retention-days: 14

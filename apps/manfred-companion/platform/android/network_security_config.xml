@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- HTTP is allowed because Tailscale encrypts the 100.64.0.0/10 tunnel.
-         Runtime endpoint validation rejects non-tailnet HTTP destinations. -->
+    <!-- Omi uploads validate tailnet endpoints at runtime. EyeVue HTTP is limited
+         to its fixed local AP address and sockets on the selected glasses network. -->
     <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

@@ -1,6 +1,6 @@
 # Manfred Companion — direct S25 wearable bridge
 
-Manfred Companion is the mobile connector between **Omi Dev Kit 2**, the Samsung Galaxy S25, and Demerzel. It continues the user-owned data-spine idea from [`thetopham/exocortex`](https://github.com/thetopham/exocortex), and implementation now belongs to the private `thetopham/manfred` repository alongside Ears and existing vision services. Eyes through CyanBridge are planned; this extraction adds no new device functionality.
+Manfred Companion is the mobile connector between **Omi Dev Kit 2**, the Samsung Galaxy S25, and Demerzel. It continues the user-owned data-spine idea from [`thetopham/exocortex`](https://github.com/thetopham/exocortex), and implementation now belongs to the private `thetopham/manfred` repository alongside Ears and existing vision services. An experimental EyeVue photo session is now included; see [EyeVue setup and acceptance](../../docs/eyevue-photos.md) and [the tested E09-family hardware profile](../../docs/hardware/eyevue-e09.md).
 
 The predecessor's durable ideas are preserved:
 
@@ -99,6 +99,8 @@ timestamp_basis = s25_pcm_sample_clock
 It is not labeled as an Omi hardware clock. Future firmware/header evidence can strengthen this without changing the upload schema.
 
 ## Build and test
+
+The [Manfred Android workflow](../../.github/workflows/android.yml) builds this app in `thetopham/manfred`. Choose its **stable** artifact for an in-place device update; PR artifacts use an ephemeral validation signer. Stable artifacts include a checksum and source-commit receipt. The workflow runs Flutter analysis, Flutter tests, native EyeVue tests, an arm64 APK build, and signature verification.
 
 This host does not have a system Flutter/Android toolchain. The repository therefore keeps portable Flutter source plus Android policy overlays. On a Flutter 3.44+ development machine with an Android SDK:
 
