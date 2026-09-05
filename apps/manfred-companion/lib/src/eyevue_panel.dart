@@ -23,6 +23,7 @@ class _EyevuePanelState extends State<EyevuePanel> {
           final EyevueController state = widget.controller;
           final EyevueImage? image = state.latestImage;
           final EyevueFirmware? firmware = state.firmware;
+          final EyevueBattery? battery = state.battery;
           final String? address = state.address;
           final List<EyevueDevice> devices = <EyevueDevice>[
             ...state.devices,
@@ -54,6 +55,15 @@ class _EyevuePanelState extends State<EyevuePanel> {
                     Text('Hardware: ${state.project} / ${state.customer ?? "unknown"}'),
                   if (firmware != null)
                     Text('Firmware: BT ${firmware.btVersion} · ISP ${firmware.ispVersion} · device ${firmware.deviceVersion}'),
+                  if (battery != null)
+                    Text('Glasses battery: ${battery.percent}%${battery.charging ? " · Charging" : ""}'),
+                  if (state.connected && battery == null)
+                    const Text('Glasses battery: unavailable'),
+                  if (state.batteryTooLowForWifi)
+                    Text(
+                      'Charge the glasses to at least 20% before Wi-Fi photo transfer.',
+                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    ),
                   if (state.firmwareStatus == 'reading') const Text('Reading firmware versions…'),
                   if (state.firmwareStatus == 'unavailable')
                     Text(state.connected

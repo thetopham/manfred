@@ -65,6 +65,23 @@ class EyevueDevice {
   final int rssi;
 }
 
+class EyevueBattery {
+  const EyevueBattery({required this.percent, required this.charging});
+  final int percent;
+  final bool charging;
+  bool get tooLowForWifi => percent < 20;
+
+  static EyevueBattery? tryParse(Object? value) {
+    final EyevueMap map = eyevueMap(value);
+    final Object? percent = map['percent'];
+    final Object? charging = map['charging'];
+    if (percent is! int || percent < 0 || percent > 100 || charging is! bool) {
+      return null;
+    }
+    return EyevueBattery(percent: percent, charging: charging);
+  }
+}
+
 class EyevueFirmware {
   const EyevueFirmware({required this.btVersion, required this.ispVersion, required this.deviceVersion});
   final String btVersion;

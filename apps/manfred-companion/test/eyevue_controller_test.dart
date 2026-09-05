@@ -216,6 +216,51 @@ void main() {
     expect(controller.canStart, isTrue);
   });
 
+  test('low battery prevents Wi-Fi startup until a fresh reading reaches 20 percent', () async {
+    await controller.initialize();
+    bridge.emitState(<String, Object?>{
+      'battery': <String, Object?>{'percent': 13, 'charging': true},
+    });
+    expect(controller.battery?.percent, 13);
+    expect(controller.battery?.charging, isTrue);
+    expect(controller.canStart, isFalse);
+    await controller.startSession();
+    expect(acquired, 0);
+    expect(bridge.starts, 0);
+    expect(controller.error, contains('13%'));
+    bridge.emitState(<String, Object?>{
+      'battery': <String, Object?>{'percent': 20, 'charging': false},
+    });
+    expect(controller.canStart, isTrue);
+    await controller.startSession();
+    expect(bridge.starts, 1);
+    expect(acquired, 1);
+  });
+
+  test('unknown or disconnected battery never becomes a stale low-power gate', () async {
+    await controller.initialize();
+    expect(controller.battery, isNull);
+    expect(controller.canStart, isTrue);
+    bridge.emitState(<String, Object?>{
+      'battery': <String, Object?>{'percent': 13, 'charging': false},
+    });
+    expect(controller.batteryTooLowForWifi, isTrue);
+    bridge.emitState(<String, Object?>{'connected': false});
+    expect(controller.battery, isNull);
+    bridge.emitState(<String, Object?>{'connected': true, 'battery': null});
+    expect(controller.canStart, isTrue);
+    for (final Object? invalid in <Object?>[
+      <String, Object?>{'percent': 255, 'charging': false},
+      <String, Object?>{'percent': -1, 'charging': false},
+      <String, Object?>{'percent': 13.5, 'charging': false},
+      <String, Object?>{'percent': 13, 'charging': 'false'},
+    ]) {
+      bridge.emitState(<String, Object?>{'battery': invalid});
+      expect(controller.battery, isNull);
+      expect(controller.canStart, isTrue);
+    }
+  });
+
   test('permission denial never acquires service or starts native capture', () async {
     await controller.initialize();
     permissions.sessionFailure = StateError('permission denied');

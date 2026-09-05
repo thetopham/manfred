@@ -1,12 +1,12 @@
 # EyeVue photos in Manfred Companion
 
-Manfred Companion adds a focused Android EyeVue photo component alongside the existing Omi audio bridge, targeting the tested TK8 glasses profile. The pending **0.5.1+9** build makes **Capture and fetch (experimental)** the default. Its build, software tests, and new physical workflow acceptance are pending; these instructions describe the implemented flow, not a confirmed hardware result.
+Manfred Companion adds a focused Android EyeVue photo component alongside the existing Omi audio bridge, targeting the tested TK8 glasses profile. Installed **0.5.1+9** makes **Capture and fetch (experimental)** the default. Its Manfred-owned build passed 47 Flutter and 78 native tests (125 total), but the first physical capture timed out at 13% glasses battery without a saved image. The follow-up **0.5.2+10** adds battery visibility, the vendor's below-20% Wi-Fi startup guard, and command/phase diagnostics; its build validation is pending. The automatic capture/reconnect/save workflow still requires a charged hardware test.
 
 Hardware identity, measured resolutions, firmware boundaries, and protocol evidence are recorded in the [EyeVue E09-family / TK8 hardware profile](hardware/eyevue-e09.md).
 
 ## First supervised session
 
-1. Disconnect EyeVue from CyanBridge so only Manfred owns its BLE connection.
+1. Charge the glasses above 30% for the supervised test. The vendor app blocks Wi-Fi import and live preview below 20%; Manfred 0.5.2 follows that startup policy when battery is known. This is not a verified firmware threshold for taking an offline photo. Disconnect EyeVue from CyanBridge so only Manfred owns its BLE connection.
 2. Open Manfred, choose **Find EyeVue**, select the glasses, and **Connect**. Allow nearby-device permissions.
 3. Leave **Capture and fetch (experimental)** selected, tap **Start photo session**, and accept Android's glasses Wi-Fi prompt if it appears.
 4. Manfred first joins the glasses AP to baseline the existing album, then ends transfer mode and releases that Wi-Fi connection. Wait for **Ready**: the camera must report idle and a fresh media count must arrive before a new capture can be tracked.
@@ -16,7 +16,7 @@ Hardware identity, measured resolutions, firmware boundaries, and protocol evide
 
 Only EyeVue HTTP sockets use the glasses Wi-Fi network; the app preserves the normal internet route for Omi uploads. Actual Tailscale and concurrent-audio behavior still requires device validation.
 
-After BLE connection, the new build also makes an optional read-only firmware query. If the device replies, the panel displays **BT**, **ISP**, and **device** versions. A missing reply displays unavailable and does not invalidate a working Bluetooth connection. No current firmware values have yet been measured with this build; the query does not check for or install an update.
+After BLE connection, optional read-only queries display firmware versions and (from 0.5.2) battery percentage/charging state. Missing replies remain unavailable and do not invalidate a working Bluetooth connection. Version 0.5.1 read **BT 1.1.9 / ISP 3.3.7 / device 2** from this TK8/0201 unit. The vendor catalog offered neither a BLE nor Wi-Fi package for the actual BT version; this does not independently establish the latest ISP version. No firmware was installed or modified.
 
 ## Hardware acceptance remains explicit
 
@@ -24,7 +24,9 @@ The earlier CyanBridge build downloaded originals at 3200x2400. The independentl
 
 The installed **0.5.0** primary media-AP test did not import a new image from shutter attempts while the AP was active. An offline shutter did produce a count increase of one in about **2.4 seconds**. This is the evidence motivating Capture and fetch; it does not prove that the new automatic capture/reconnect/save cycle works.
 
-Acceptance for **0.5.1 Capture and fetch** is two successive offline captures, each followed by automatic AP retrieval of exactly one new full-resolution JPEG, then return to camera Ready. Record measured dimensions, total shutter-to-save latency, absence of historical duplicates, and working Stop. Source tests and an APK build cannot substitute for this test.
+The first **0.5.1 Capture and fetch** session joined Wi-Fi, read the baseline, finished transfer, then received photo-idle status and a fresh media count before Ready. The user reported an error sound on Take photo; no photo-busy/count response or saved JPEG followed, and the 15-second completion deadline expired. Battery push frames reported a decline from 16% to 13%, not charging. The old logs omit outbound write acknowledgements, so AA14 silence alone cannot establish whether the shutter command reached firmware. Low power is plausible, not a proven cause.
+
+Acceptance for the **charged follow-up Capture and fetch** test is two successive offline captures, each followed by automatic AP retrieval of exactly one new full-resolution JPEG, then return to camera Ready. Record measured dimensions, total shutter-to-save latency, absence of historical duplicates, and working Stop. Source tests and an APK build cannot substitute for this test.
 
 **Keep Wi-Fi open (experimental)** retains one media AP session and polls for new photos after baselining. Concurrent still capture is not an accepted capability on the tested firmware.
 

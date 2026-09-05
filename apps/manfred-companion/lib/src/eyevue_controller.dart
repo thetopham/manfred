@@ -43,12 +43,14 @@ class EyevueController extends ChangeNotifier {
   List<EyevueDevice> devices = <EyevueDevice>[];
   EyevueImage? latestImage;
   EyevueFirmware? firmware;
+  EyevueBattery? battery;
   String firmwareStatus = 'not_read';
   String? firmwareError;
   String? project;
   String? customer;
   Stream<EyevueImage> get images => _images.stream;
-  bool get canStart => connected && !connecting && !busy && !sessionActive && !_foregroundHeld;
+  bool get batteryTooLowForWifi => battery?.tooLowForWifi ?? false;
+  bool get canStart => connected && !connecting && !busy && !sessionActive && !_foregroundHeld && !batteryTooLowForWifi;
   bool get canCapture => connected && sessionActive && ready && !busy;
 
   Future<void> initialize() async {
@@ -109,6 +111,12 @@ class EyevueController extends ChangeNotifier {
       status = state['status']! as String;
     }
     error = state['error'] is String ? state['error']! as String : null;
+    // Never carry one device's battery reading into another connection.
+    if (!connected || connecting) {
+      battery = null;
+    } else if (state.containsKey('battery')) {
+      battery = EyevueBattery.tryParse(state['battery']);
+    }
     if (state.containsKey('firmware')) {
       firmware = EyevueFirmware.tryParse(state['firmware']);
     }
@@ -211,6 +219,9 @@ class EyevueController extends ChangeNotifier {
   Future<void> startSession({String startup = 'capture'}) => _run(() async {
         if (!connected || sessionActive || _foregroundHeld) {
           throw StateError('Connect EyeVue and stop the previous photo session first.');
+        }
+        if (batteryTooLowForWifi) {
+          throw StateError('Glasses battery is ${battery!.percent}%. Charge to at least 20% before starting Wi-Fi photo transfer.');
         }
         if (startup != 'media' && startup != 'live' && startup != 'capture') {
           throw ArgumentError.value(startup, 'startup');
