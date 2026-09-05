@@ -36,10 +36,14 @@ class _EyevuePanelState extends State<EyevuePanel> {
                 children: <Widget>[
                   Text('EyeVue photos', style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Experimental: capture while glasses Wi-Fi is active is still being tested. '
-                    'A session watches for new photos; existing photos stay on the glasses. '
-                    'Photos are saved on this phone and are not sent to ChatGPT automatically.',
+                  Text(
+                    _startup == 'capture'
+                        ? 'Capture and fetch reconnects glasses Wi-Fi after each new photo. '
+                            'Start a session before taking pictures. Existing photos stay on the glasses. '
+                            'Photos are saved on this phone; ChatGPT attachment is a separate step.'
+                        : 'Experimental: capture while glasses Wi-Fi is active is still being tested. '
+                            'A session watches for new photos; existing photos stay on the glasses. '
+                            'Photos are saved on this phone and are not sent to ChatGPT automatically.',
                   ),
                   const SizedBox(height: 12),
                   Text(state.status),
@@ -109,6 +113,7 @@ class _EyevuePanelState extends State<EyevuePanel> {
                     isExpanded: true,
                     items: const <DropdownMenuItem<String>>[
                       DropdownMenuItem<String>(value: 'media', child: Text('Photo session')),
+                      DropdownMenuItem<String>(value: 'capture', child: Text('Capture and fetch (experimental'))),
                       DropdownMenuItem<String>(value: 'live', child: Text('Alternate startup (experimental)')),
                     ],
                     onChanged: state.busy || state.sessionActive

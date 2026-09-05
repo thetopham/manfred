@@ -86,6 +86,61 @@ internal class EyevuePhotoSession(
         }
     }
 
+
+    /** Baseline belongs to the logical capture session, not this network attachment. */
+    suspend fun snapshot(): Map<String, EyevuePhotoFingerprint> =
+        fetchManifest().associate { it.path to it.fingerprint }
+
+    /** Retrieve a completed shutter against the baseline retained before Wi-Fi was closed. */
+    suspend fun fetchNewPhotos(
+        sessionId: String,
+        tracker: EyevueNewPhotoTracker,
+        onStatus: (String, Boolean) -> Unit,
+        onImage: (Map<String, Any?>) -> Unit,
+    ): Int = kotlinx.coroutines.withTimeout(60_000L) {
+        val detected = mutableMapOf<Pair<String, EyevuePhotoFingerprint>, Long>()
+        val retries = mutableMapOf<Pair<String, EyevuePhotoFingerprint>, Int>()
+        var imported = 0
+        var settled = false
+        var previousSnapshot: Map<String, EyevuePhotoFingerprint>? = null
+        tracker.observe(emptyMap())
+        while (!settled) {
+            currentCoroutineContext().ensureActive()
+            val photos = fetchManifest()
+            val byPath = photos.associateBy { it.path }
+            val snapshot = photos.associate { it.path to it.fingerprint }
+            val candidates = tracker.observe(snapshot)
+            // Do not leave another new photo behind merely because the first import succeeded.
+            if (imported > 0 && snapshot == previousSnapshot && candidates.isEmpty()) {
+                settled = true
+                continue
+            }
+            val now = System.currentTimeMillis()
+            for (photo in photos) detected.putIfAbsent(photo.path to photo.fingerprint, now)
+            for ((path, fingerprint) in candidates) {
+                val key = path to fingerprint
+                onStatus("Fetching the new photo", false)
+                try {
+                    downloadAndSave(byPath.getValue(path), sessionId, detected.getValue(key)) { image ->
+                        tracker.markImported(path, fingerprint)
+                        retries.remove(key)
+                        imported++
+                        onImage(image)
+                    }
+                } catch (failure: IncompleteEyevuePhoto) {
+                    currentCoroutineContext().ensureActive()
+                    val attempt = (retries[key] ?: 0) + 1
+                    retries[key] = attempt
+                    if (attempt >= 5) throw IOException("The new photo remained incomplete after five attempts", failure)
+                    onStatus("Waiting for the completed original ($attempt/5)", false)
+                }
+            }
+            previousSnapshot = snapshot
+            delay(750)
+        }
+        imported
+    }
+
     private suspend fun fetchManifest(): List<EyevueRemotePhoto> = withContext(Dispatchers.IO) {
         val call = client.newCall(Request.Builder().url("http://192.168.169.1/app/getfilelist").build())
         withEyevueHttpCall(call) {

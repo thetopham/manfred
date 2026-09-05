@@ -19,6 +19,7 @@ class FakeBridge implements EyevueBridge {
     'address': 'AA:BB:CC:DD:EE:FF',
   };
   int starts = 0;
+  String? lastStartup;
   int stops = 0;
   int captures = 0;
   int scans = 0;
@@ -60,6 +61,7 @@ class FakeBridge implements EyevueBridge {
   @override
   Future<void> startSession(String startup) async {
     starts++;
+    lastStartup = startup;
     if (startFailure != null) {
       throw startFailure!;
     }
@@ -168,6 +170,27 @@ void main() {
     bridge.emitState(<String, Object?>{'sessionActive': false});
     await settle();
     expect(released, 1);
+  });
+
+  test('capture mode retains foreground ownership while Wi-Fi reconnects', () async {
+    await controller.initialize();
+    await controller.startSession(startup: 'capture');
+    expect(bridge.lastStartup, 'capture');
+    expect(acquired, 1);
+    bridge.emitState(<String, Object?>{'ready': true});
+    await controller.capture();
+    expect(bridge.captures, 1);
+    bridge.emitState(<String, Object?>{'ready': false, 'status': 'Fetching the new photo'});
+    expect(controller.sessionActive, isTrue);
+    expect(controller.canCapture, isFalse);
+    await controller.capture();
+    expect(bridge.captures, 1);
+    await settle();
+    expect(released, 0);
+    bridge.emitState(<String, Object?>{'ready': true, 'status': 'Ready for the next photo'});
+    expect(controller.canCapture, isTrue);
+    expect(acquired, 1);
+    expect(released, 0);
   });
 
   test('permission denial never acquires service or starts native capture', () async {

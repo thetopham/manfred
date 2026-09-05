@@ -76,6 +76,11 @@ class EyevuePlugin(
     private var captureJob: Job? = null
     private var sessionId: String? = null
     private var sessionFailure: String? = null
+    private var captureMode = false
+    private var captureGate: EyevueCaptureCycleGate? = null
+    private var captureReceipt: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+    private var captureDeadlineJob: Job? = null
+    private var captureCommandJob: Job? = null
     private var scanCallback: ScanCallback? = null
     private var scanTimeout: Job? = null
     private val devices = linkedMapOf<String, Map<String, Any?>>()
@@ -292,7 +297,7 @@ class EyevuePlugin(
     }
 
     private fun startSession(startup: String) {
-        require(startup == "media" || startup == "live") { "Startup must be media or live" }
+        require(startup == "media" || startup == "live" || startup == "capture") { "Startup must be media, live, or capture" }
         check(gatt.isConnected() && !connecting && !disconnecting) { "Connect the glasses first" }
         check(!sessionActive && sessionJob == null) { "A photo session is already active" }
         check(customer?.project?.uppercase()?.startsWith("TK8") == true) {
@@ -301,6 +306,7 @@ class EyevuePlugin(
         stopScan()
         val id = UUID.randomUUID().toString()
         sessionId = id
+        captureMode = startup == "capture"
         sessionActive = true
         ready = false
         sessionFailure = null
@@ -308,6 +314,10 @@ class EyevuePlugin(
         status = if (startup == "live") "Opening experimental live-mode Wi-Fi" else "Opening EyeVue photo Wi-Fi"
         emitState()
         val job = scope.launch(start = CoroutineStart.LAZY) {
+            if (startup == "capture") {
+                runCaptureSession(id)
+                return@launch
+            }
             val ap = EyevueApConnection(context) {
                 failSession("The EyeVue Wi-Fi connection was lost")
             }
@@ -369,6 +379,278 @@ class EyevuePlugin(
         job.start()
     }
 
+
+    /** Keep one logical session while closing Wi-Fi around every shutter. */
+    private suspend fun runCaptureSession(id: String) {
+        val completions = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
+        val gate = EyevueCaptureCycleGate()
+        var ap: EyevueApConnection? = null
+        var media: EyevuePhotoSession? = null
+        var modeRequested = false
+        var closingAp = false
+        captureGate = gate
+        val observer = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            gatt.frames.collect { frame ->
+                if (!captureMode || sessionId != id) return@collect
+                var completed = false
+                when (frame.commandId) {
+                    EyevueProtocol.CMD_GET_MEDIA_COUNT, EyevueProtocol.CMD_RECEIVE_THUMBNAIL_COUNT -> {
+                        decodeMediaCount(frame)?.let {
+                            completed = gate.onMediaCount(it)
+                            if (!completed && gate.isArmed && gate.hasFreshCount) {
+                                ready = false
+                                status = "New media reported - waiting for photo completion"
+                                beginCaptureDeadline(id)
+                                emitState()
+                            }
+                        }
+                    }
+                    0x45 -> {
+                        // TK8 has nine status fields; photo-busy is byte zero.
+                        // Its optional tenth isImport field must not be invented.
+                        if (frame.payload.size >= 9) {
+                            val value = frame.payload[0].toInt() and 0xff
+                            if (value == 0 || value == 1) {
+                                if (value == 1 && gate.isArmed) {
+                                    ready = false
+                                    status = "Capturing photo - waiting for the glasses"
+                                    beginCaptureDeadline(id)
+                                    emitState()
+                                }
+                                completed = gate.onPhotoBusy(value == 1)
+                            }
+                        }
+                    }
+                }
+                if (completed) {
+                    captureReceipt?.complete(Unit)
+                    completions.trySend(Unit)
+                }
+            }
+        }
+
+        suspend fun openMedia(): EyevuePhotoSession {
+            closingAp = false
+            val owned = EyevueApConnection(context) {
+                if (!closingAp) failSession("The EyeVue Wi-Fi connection was lost")
+            }
+            ap = owned
+            modeRequested = true
+            status = "Joining EyeVue Wi-Fi for new photos"
+            emitState()
+            val ssid = awaitSsid("media")
+            val network = owned.connect(ssid)
+            return EyevuePhotoSession(context, network).also { media = it }
+        }
+
+        suspend fun closeMedia(requireReceipt: Boolean) {
+            closingAp = true
+            val ownedAp = ap
+            val ownedMedia = media
+            ap = null
+            media = null
+            val finishNeeded = modeRequested
+            modeRequested = false
+            withContext(NonCancellable) {
+                try {
+                    ownedMedia?.close()
+                    if (finishNeeded && gatt.isConnected()) {
+                        if (requireReceipt) {
+                            awaitFinishReceipt()
+                        } else {
+                            withTimeoutOrNull(5_000L) {
+                                gatt.write(EyevueProtocol.buildFinishTransferPacket())
+                            }
+                        }
+                    }
+                } finally {
+                    ownedAp?.close()
+                }
+            }
+        }
+
+        try {
+            val initial = openMedia().snapshot()
+            val tracker = EyevueNewPhotoTracker(initial)
+            closeMedia(requireReceipt = true)
+            while (true) {
+                currentCoroutineContext().ensureActive()
+                // AP exit can finish a previously busy camera asynchronously.
+                status = "Waiting for the glasses camera to become idle"
+                emitState()
+                awaitPhotoIdle()
+                // Query after AP closure so an old count notification cannot arm the cycle.
+                gate.arm(awaitMediaCount())
+                ready = true
+                status = "Ready - press the shutter to capture and fetch."
+                emitState()
+                completions.receive()
+                ready = false
+                gate.disarm()
+                captureDeadlineJob?.cancelAndJoin()
+                captureDeadlineJob = null
+                captureReceipt = null
+                captureCommandJob?.join()
+                captureCommandJob = null
+                status = "Photo captured - reconnecting to fetch it"
+                emitState()
+                val attached = openMedia()
+                attached.fetchNewPhotos(
+                    sessionId = id,
+                    tracker = tracker,
+                    onStatus = { message, _ ->
+                        ready = false
+                        status = message
+                        emitState()
+                    },
+                    onImage = { image ->
+                        latestImage = image
+                        broadcastImageReady(image)
+                        sink?.success(linkedMapOf<String, Any?>("type" to "imageReady").apply { putAll(image) })
+                        emitState()
+                    },
+                )
+                closeMedia(requireReceipt = true)
+            }
+        } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+            sessionFailure = "Capture and fetch timed out: " + status
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            sessionFailure = failure.message ?: "EyeVue capture and fetch failed"
+            Log.w("EyevuePhotoSession", "Capture cycle failed: " + failure.javaClass.simpleName)
+        } finally {
+            withContext(NonCancellable) {
+                ready = false
+                status = "Closing EyeVue capture session"
+                gate.disarm()
+                emitState()
+                captureDeadlineJob?.cancelAndJoin()
+                captureDeadlineJob = null
+                captureReceipt?.cancel()
+                captureReceipt = null
+                captureCommandJob?.cancelAndJoin()
+                captureCommandJob = null
+                observer.cancelAndJoin()
+                completions.close()
+                try {
+                    closeMedia(requireReceipt = false)
+                } finally {
+                    captureGate = null
+                    captureMode = false
+                    sessionActive = false
+                    sessionJob = null
+                    error = sessionFailure
+                    status = sessionFailure ?: if (gatt.isConnected()) "Connected - capture session stopped" else "Disconnected"
+                    emitState()
+                }
+            }
+        }
+    }
+
+    private fun decodeMediaCount(frame: EyevueFrame): Int? =
+        if (frame.payload.size < 2) null else
+            ((frame.payload[0].toInt() and 0xff) shl 8) or (frame.payload[1].toInt() and 0xff)
+
+
+    private suspend fun awaitPhotoIdle(): Unit = coroutineScope {
+        val reply = async(start = CoroutineStart.UNDISPATCHED) {
+            withTimeout(10_000L) {
+                gatt.frames.first {
+                    it.commandId == 0x45 && it.payload.size >= 9 &&
+                        it.payload[0].toInt() == 0
+                }
+            }
+        }
+        try {
+            gatt.write(EyevueProtocol.buildGetDeviceStatusPacket()).getOrThrow()
+            reply.await()
+            Unit
+        } finally {
+            reply.cancel()
+        }
+    }
+
+    private suspend fun awaitMediaCount(): Int = coroutineScope {
+        val reply = async(start = CoroutineStart.UNDISPATCHED) {
+            withTimeout(10_000L) {
+                decodeMediaCount(gatt.frames.first {
+                    (it.commandId == EyevueProtocol.CMD_GET_MEDIA_COUNT ||
+                        it.commandId == EyevueProtocol.CMD_RECEIVE_THUMBNAIL_COUNT) &&
+                        decodeMediaCount(it) != null
+                })!!
+            }
+        }
+        try {
+            gatt.write(EyevueProtocol.valuePacket(EyevueProtocol.CMD_GET_MEDIA_COUNT, 0)).getOrThrow()
+            reply.await()
+        } finally {
+            reply.cancel()
+        }
+    }
+
+    private suspend fun awaitFinishReceipt(): Unit = coroutineScope {
+        val reply = async(start = CoroutineStart.UNDISPATCHED) {
+            withTimeout(5_000L) {
+                gatt.frames.first {
+                    it.commandId == EyevueProtocol.CMD_FILE_DOWNLOAD_FINISH &&
+                        it.payload.contentEquals(byteArrayOf(0x30, 0x01))
+                }
+            }
+        }
+        try {
+            gatt.write(EyevueProtocol.buildFinishTransferPacket()).getOrThrow()
+            reply.await()
+            // An observed sequencing response, not proof of AP shutdown.
+            Unit
+        } finally {
+            reply.cancel()
+        }
+    }
+
+    private fun beginCaptureDeadline(id: String) {
+        if (captureReceipt != null) return
+        val receipt = kotlinx.coroutines.CompletableDeferred<Unit>()
+        captureReceipt = receipt
+        lateinit var owned: Job
+        owned = scope.launch(start = CoroutineStart.LAZY) {
+            try {
+                withTimeout(15_000L) { receipt.await() }
+            } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+                if (sessionId == id && sessionActive && captureMode) {
+                    failSession("The glasses did not confirm a completed photo within 15 seconds")
+                }
+            } finally {
+                if (captureDeadlineJob === owned) captureDeadlineJob = null
+            }
+        }
+        captureDeadlineJob = owned
+        owned.start()
+    }
+
+    private fun captureForCycle() {
+        check(sessionActive && ready && captureGate?.isArmed == true) {
+            "Wait until the capture session is ready with glasses Wi-Fi off"
+        }
+        val id = sessionId ?: throw IOException("The capture session is unavailable")
+        ready = false
+        status = "Sending shutter command"
+        error = null
+        beginCaptureDeadline(id)
+        emitState()
+        val job = scope.launch(start = CoroutineStart.LAZY) {
+            try {
+                gatt.write(EyevueProtocol.buildPhotoPacket(highQuality = false)).getOrThrow()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                failSession(failure.message ?: "The shutter command failed")
+            }
+        }
+        captureCommandJob = job
+        job.start()
+    }
+
     private suspend fun awaitSsid(startup: String): String = coroutineScope {
         val reply = async(start = CoroutineStart.UNDISPATCHED) {
             withTimeout(30_000L) {
@@ -412,6 +694,10 @@ class EyevuePlugin(
 
     private fun capture() {
         check(gatt.isConnected() && !connecting && !disconnecting) { "Connect the glasses first" }
+        if (captureMode) {
+            captureForCycle()
+            return
+        }
         check(captureJob == null) { "A shutter command is already pending" }
         error = null
         val job = scope.launch(start = CoroutineStart.LAZY) {

@@ -198,7 +198,7 @@ class EyevueController extends ChangeNotifier {
         if (!connected || sessionActive || _foregroundHeld) {
           throw StateError('Connect EyeVue and stop the previous photo session first.');
         }
-        if (startup != 'media' && startup != 'live') {
+        if (startup != 'media' && startup != 'live' && startup != 'capture') {
           throw ArgumentError.value(startup, 'startup');
         }
         _starting = true;
