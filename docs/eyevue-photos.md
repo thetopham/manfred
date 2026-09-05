@@ -1,6 +1,6 @@
 # EyeVue photos in Manfred Companion
 
-Manfred Companion adds a focused Android EyeVue photo component alongside the existing Omi audio bridge, targeting the tested TK8 glasses profile. Installed **0.5.1+9** makes **Capture and fetch (experimental)** the default. Its Manfred-owned build passed 47 Flutter and 78 native tests (125 total), but the first physical capture timed out at 13% glasses battery without a saved image. The follow-up **0.5.2+10** adds battery visibility, the vendor's below-20% Wi-Fi startup guard, and command/phase diagnostics; its build from source [`212f98b`](https://github.com/thetopham/manfred/commit/212f98ba4f5f4d8ae110c034f2dca6f7965f9d73) passed 49 Flutter and 84 native tests (133 total), with stable signing verified in [Manfred run 33992980630](https://github.com/thetopham/manfred/actions/runs/33992980630). The automatic capture/reconnect/save workflow still requires a charged hardware test.
+Manfred Companion adds a focused Android EyeVue photo component alongside the existing Omi audio bridge, targeting the tested TK8 glasses profile. Installed **0.5.2+10** defaults to **Capture and fetch (experimental)** and adds battery visibility, the vendor's below-20% Wi-Fi startup guard, and command/phase diagnostics. Its build from source [`212f98b`](https://github.com/thetopham/manfred/commit/212f98ba4f5f4d8ae110c034f2dca6f7965f9d73) passed 49 Flutter and 84 native tests (133 total), with stable signing verified in [Manfred run 33992980630](https://github.com/thetopham/manfred/actions/runs/33992980630). Two supervised captures now saved new **3200x2400** originals without historical duplicates and returned to Ready. Measured capture-event-to-save times were **36.650 seconds** and **29.781 seconds**, dominated by Wi-Fi rejoining; immediate delivery and background operation remain unverified.
 
 Hardware identity, measured resolutions, firmware boundaries, and protocol evidence are recorded in the [EyeVue E09-family / TK8 hardware profile](hardware/eyevue-e09.md).
 
@@ -22,13 +22,28 @@ After BLE connection, optional read-only queries display firmware versions and (
 
 The earlier CyanBridge build downloaded originals at 3200x2400. The independently decoded reference original contains a JPEG end marker followed by three zero alignment bytes. Validation accepts up to three zero bytes after the end marker, retains the original bytes, and still checks HTTP completion and Android decoding. Repeated bulk sync downloaded the whole album again. Its BLE shutter preview was 320x180; neither tested opaque image-pull value returned a larger image.
 
-The installed **0.5.0** primary media-AP test did not import a new image from shutter attempts while the AP was active. An offline shutter did produce a count increase of one in about **2.4 seconds**. This is the evidence motivating Capture and fetch; it does not prove that the new automatic capture/reconnect/save cycle works.
+The earlier **0.5.0** primary media-AP test was at **27% battery**. Stop was issued only **3.673 seconds after the shutter request**, confounding the lack of a new image; that run cannot establish a capture restriction. An offline shutter did produce a count increase of one in about **2.4 seconds**.
 
-The first **0.5.1 Capture and fetch** session joined Wi-Fi, read the baseline, finished transfer, then received photo-idle status and a fresh media count before Ready. The user reported an error sound on Take photo; no photo-busy/count response or saved JPEG followed, and the 15-second completion deadline expired. Battery push frames reported a decline from 16% to 13%, not charging. The old logs omit outbound write acknowledgements, so AA14 silence alone cannot establish whether the shutter command reached firmware. Low power is plausible, not a proven cause.
+The later **0.5.1 Capture and fetch** session joined Wi-Fi, read the baseline, finished transfer, then received photo-idle status and a fresh media count before Ready. The user reported an error sound on Take photo; no photo-busy/count response or saved JPEG followed, and the 15-second completion deadline expired. Battery push frames reported a decline from 16% to **13%**, not charging. The 13% reading belongs to this later test. Its logs omit outbound write acknowledgements, so AA14 silence alone cannot establish whether the shutter command reached firmware. Low power remains a plausible cause of that failure.
 
-Acceptance for the **charged follow-up Capture and fetch** test is two successive offline captures, each followed by automatic AP retrieval of exactly one new full-resolution JPEG, then return to camera Ready. Record measured dimensions, total shutter-to-save latency, absence of historical duplicates, and working Stop. Source tests and an APK build cannot substitute for this test.
+### Verified 0.5.2 capture-and-fetch cycles
 
-**Keep Wi-Fi open (experimental)** retains one media AP session and polls for new photos after baselining. Concurrent still capture is not an accepted capability on the tested firmware.
+Two new full-resolution JPEGs were saved and independently verified at **3200x2400**. Each cycle returned to **Ready**, and neither imported historical album duplicates. Device-log times on 2026-09-05 were:
+
+| Trigger | Capture event to saved | Total delay | Wi-Fi rejoin | Download/save | JPEG bytes |
+| --- | --- | --- | --- | --- | --- |
+| App shutter request | 15:45:49.997 to 15:46:26.647 | 36.650 s | 32.708 s | 498 ms | 354704 |
+| Received glasses capture event | 15:48:00.325 to 15:48:30.106 | 29.781 s | 26.209 s | 257 ms | 263400 |
+
+The glasses timing begins at its received capture event. Android logged remembered approval and connection-dialog bypass for these joins. The largest wait was **23.830-31.152 seconds before connection initiation**; the network became available **0.948-1.779 seconds after initiation**. AP discovery or selection is a likely explanation for the leading delay, but the exact scan stage has not been isolated. JPEG download/save was under half a second in both cycles.
+
+These measurements verify the two supervised capture/reconnect/save cycles. Background capture, VPN and concurrent-audio behavior, Tasker receipt and URI access, and ChatGPT attachment still require their own acceptance tests.
+
+### Charged keep-Wi-Fi-open test
+
+**Keep Wi-Fi open (experimental)** retains one media AP session and polls for new photos after baselining. With the glasses **41% charged and unplugged**, an app shutter request at **16:00:19.709** received Android GATT write completion with **status 0 at 16:00:19.730**. No `0x22` response, photo-busy event, new media count, or JPEG followed for **at least 47 seconds**. The user confirmed another error beep during this test. GATT write completion does not establish that firmware accepted the requested camera operation.
+
+This charged result supports a capture restriction while the tested firmware is in **media-import mode**. It does not establish a universal inability to use the camera and Wi-Fi together; live-AP/video mode remains a separate capability question. Concurrent still capture in the media AP mode is not an accepted capability on this unit. The test session was stopped successfully, and the temporary Android keep-awake setting was restored to **0**.
 
 **Alternate startup (experimental)** starts the vendor live AP mode and then attempts the same new-photo retrieval. It sends one live command and waits for the asynchronous SSID report, without the duplicate media-start requests found in CyanBridge. It does not start or decode video. A previous live-preview test reached RTSP but CyanBridge's Media3 parser rejected the vendor SDP line `a=decode_buf=300`; no stream dimensions were measured.
 

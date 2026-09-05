@@ -40,7 +40,7 @@ Source: [native protocol](../../apps/manfred-companion/platform/android/kotlin/e
 
 ## Capture while Wi-Fi is active: evidence and limits
 
-During the supervised 0.5.0 primary media-AP test, shutter attempts did not import a new image while the AP was active. An offline capture produced a count increase of one in about 2.4 seconds; the user also reported ignored still-photo attempts with Wi-Fi active. Persistent-AP full-resolution capture is therefore **not an accepted capability**. The exact behavior of the media and experimental live startup paths must be recorded separately as controlled tests finish.
+During the supervised 0.5.0 primary media-AP test, a shutter attempt did not import a new image while the AP was active, but Stop followed only **3.673 seconds** after the write. The contemporaneous battery report was **27%**, not the later 13% reading from 0.5.1. This short observation alone could not establish a firmware restriction. An offline capture subsequently produced a count increase of one in about 2.4 seconds. The longer charged 0.5.2 media-mode test below provides stronger evidence; media and live startup remain separate modes.
 
 The vendor home-screen shutter handler blocks capture while its `isImport` state is true and displays an importing message. This is concrete evidence of a vendor software mode policy. It is not proof that the camera hardware cannot operate with Wi-Fi: the vendor's live activity explicitly opens an AP and plays a camera stream. Nor does live support establish simultaneous full-resolution JPEG capture.
 
@@ -49,6 +49,20 @@ There is an important status-schema mismatch: the vendor's `0x45` parser reads `
 Sources: vendor `view/home/HomeFragment.java:202-217`, `bluetooth/beans/SyncValueBean.java:33-45`, and `view/live/EyevueTLiveActivity.java:230-246`. The import gate is a code observation; whether a different supported command sequence or firmware revision permits concurrent still capture remains unresolved.
 
 The earlier CyanBridge live attempt reached the RTSP server, then Media3 rejected the SDP attribute `a=decode_buf=300`. This is an Android player/parser compatibility failure, not evidence that the stream is absent. The vendor's LibVLC path is a useful implementation reference. A stream-frame fallback would need separate decoding, resolution, latency, and network-routing measurements; it must not be described as a 3200 x 2400 still-photo path. See [Media3 RTSP documentation](https://developer.android.com/media/media3/exoplayer/rtsp) and its [SDP parser source](https://github.com/androidx/media/blob/release/libraries/exoplayer_rtsp/src/main/java/androidx/media3/exoplayer/rtsp/SessionDescriptionParser.java).
+
+## Additional E09 research reviewed on 2026-09-05
+
+The user's four E09 repositories provide interoperable companion-app code, reverse-engineering notes, and catalog tooling. They do not establish an applicable firmware modification for this unit.
+
+- The [main protocol's live-preview section](https://github.com/sctg-development/ai-smart-glasses-e09/blob/c32e065ebbea769184df5abda9e43774631e1eca/REVERSE_ENGINEERING_EYEVUE_BLE_PROTOCOL.md#L557-L575) reports **H.264 at 1600 x 1200**, validated on the researcher's hardware using VLC/ffprobe. It describes an AP/T-series unit but does not tie that observation to our TK8/0201 identity or BT 1.1.9 / ISP 3.3.7. This is a promising stream-resolution reference, not a measurement of our glasses.
+- The [macOS reverse tool](https://github.com/sctg-development/ai-smart-glasses-e09-reverse/blob/863467cd0f52b77e653fe9307f256c8d9e20511f/Sources/e09_reverse/AdditionalValidations.swift#L339-L437) starts live preview with `0x67 [30]`, joins the AP, and probes `/h264`. Its boolean result can be true when ffprobe is missing and video is inconclusive. Require actual decoded frames and measured dimensions for Manfred acceptance. This probe does not test still capture or physical-button events while streaming.
+- Its [BLE photo documentation](https://github.com/sctg-development/ai-smart-glasses-e09-reverse/blob/863467cd0f52b77e653fe9307f256c8d9e20511f/README.md#L487-L489) distinguishes previews from Wi-Fi originals. The [capture implementation](https://github.com/sctg-development/ai-smart-glasses-e09-reverse/blob/863467cd0f52b77e653fe9307f256c8d9e20511f/Sources/e09_reverse/BleProbe.swift#L1258-L1331) uses the already-tested `0x22 [31]` path; a high-quality label is not evidence of full-resolution BLE delivery. Its [P2P probe](https://github.com/sctg-development/ai-smart-glasses-e09-reverse/blob/863467cd0f52b77e653fe9307f256c8d9e20511f/Sources/e09_reverse/WifiP2PProbe.swift#L102-L108) also records the same AP opening on its AP/T hardware, not a demonstrated alternative transfer mode.
+- The [Flutter photo screen](https://github.com/sctg-development/ai-smart-glasses-e09-flutter/blob/3344ebc2148c9e07d20be79cc39cfdf65058b398/lib/screens/photo_screen.dart#L8-L10) explicitly implements approximately 320 x 180 BLE previews and leaves Wi-Fi original import unautomated. No working persistent-AP original-photo loop was established from that project.
+- The [firmware downloader](https://github.com/sctg-development/ai-smart-glasses-e09-firmware-downloader/blob/8667ea4ee70ae5eebee3843f5511d52805786700/src/main.rs#L124) retrieves catalog metadata/packages; it supplies neither buildable camera firmware nor a shutter unlock. For this unit, metadata selection must use actual BT **1.1.9** and code **TK80201**, as checked below, rather than example versions from documentation.
+
+The linked [Taiyang product page](http://www.taiyang-keji.com/ProDetail.aspx?ProId=161) could not be retrieved during this review (HTTP timeout / HTTPS connection failure). No sensor, chipset, storage, or battery specifications were verified from it. Repository family naming remains distinct from a physical hardware inventory.
+
+The most useful next camera experiment is a charged **live-mode RTSP decode**, using the vendor-compatible player path or a proven SDP compatibility fix. If stable frames are available, a phone/app button could save the current decoded frame without invoking the blocked still shutter or reconnecting Wi-Fi for each image. A glasses-button trigger would additionally require a button event that remains available during streaming; none of these repositories proves that. Frame quality, latency, battery use, phone internet coexistence, and voice-app handoff all need measurement. This approach would save a video frame, not recover the 3200 x 2400 still original.
 
 ## Comparison with VisionClaw and Meta's stream API
 
@@ -78,8 +92,9 @@ After unplugging, the reported level was **41%** and the initial album baseline 
 
 | Local time, 2026-09-05 | Observed stage |
 | --- | --- |
-| 15:45:49.997 | Shutter accepted with `0x22 [01]`; photo-busy state 1 |
-| 15:45:52.542 | Count advanced **29 to 30** and camera returned idle, about 2.5 seconds after acceptance |
+| 15:45:49.997 | App requested shutter; GATT write acknowledgement followed at 15:45:50.030 |
+| 15:45:50.090 | Firmware replied `0x22 [01]`; photo-busy state 1 followed at 15:45:50.091 |
+| 15:45:52.542 | Count advanced **29 to 30** and camera returned idle, about 2.5 seconds after the shutter request |
 | 15:45:52.545 | Manfred automatically requested the AP rejoin |
 | 15:46:25.253 | AP connected, **32.708 seconds** after the request |
 | 15:46:26.647 | Saved one new **3200 x 2400**, **354,704-byte** JPEG; no old album entries imported |
@@ -99,9 +114,27 @@ A second, **glasses-initiated** capture also completed. The diagnostic sequence 
 
 First device capture event to saved image was **29.781 seconds**; download/save took **257 ms**. Independent Windows decoding again confirmed **3200 x 2400**, with SHA-256 `004341737d8f799a7a0fd342657f23f342a5f106618f31a3bff6ba1754dde54c`. There were exactly **two gallery files**, one from each new capture, with no historical album duplicates. These two supervised cycles verify app-button and glasses-initiated delivery in this session. Background operation, Tasker receipt, and an existing ChatGPT Live conversation handoff are still unverified.
 
+## Charged persistent media-AP test and reconnect delay
+
+The follow-up **0.5.2 Keep Wi-Fi open** test used the same unplugged glasses at **41%**, with media startup `0x39` and the app reporting Ready. At **16:00:19.709**, Manfred wrote the normal shutter `0x22 [30]`; the GATT write callback returned status 0 at **16:00:19.730**. This confirms a successful Bluetooth write, not firmware acceptance of a capture. No corresponding `0x22` reply, photo-busy transition, media-count increment, or JPEG arrived during at least **47 seconds** of observation. The user subsequently reported an error sound during this attempt. Stop then returned the panel to **Connected - photo session stopped**; the temporary phone keep-awake setting was restored to its original value of 0.
+
+Together with the vendor import gate and successful captures after leaving transfer mode, this supports **still-capture rejection in the tested firmware's media-import mode**. It does not establish the internal firmware branch, disablement of every physical button, a universal camera/Wi-Fi hardware exclusion, or equivalent behavior in the distinct live-preview mode.
+
+The successful capture-and-fetch cycles were dominated by Wi-Fi reconnection, not JPEG download. Redacted Android system-log timing further localizes the delay:
+
+| Stage | First cycle | Second cycle |
+| --- | --- | --- |
+| Approved network / dialog bypass enabled | 15:45:53.153 | 15:48:03.354 |
+| Android initiated connection | 15:46:24.305 | 15:48:27.184 |
+| App received the network | 15:46:25.253 | 15:48:28.963 |
+| Wait before connection initiation | **31.152 s** | **23.830 s** |
+| Connection initiation to app network availability | **0.948 s** | **1.779 s** |
+
+Android explicitly bypassed the user approval dialog. The long interval likely involves AP discovery or selection, but retained logs do not contain the scan-result and DHCP transition events needed to isolate it further. Manfred has no deliberate 30-second reconnect delay. The next useful measurement is request submission, scan start, first matching AP result, and connection initiation. Download/save itself took 498 ms and 257 ms; these are foreground observations, not background latency guarantees. Raw logs containing network identifiers and the photographed images remain private local artifacts.
+
 ## Firmware identification and update architecture
 
-The vendor's read-only device-info request is **command `0x55`, payload `00`**, encoded as `AB 55 00 03 55 00 55`. Manfred's integrated connection flow uses `buildGetDeviceInfoPacket()` for an optional query with a three-second response limit, alongside the separate customer/profile lookup. The installed 0.5.2 build reconfirmed the earlier valid device response: **BT 1.1.9, ISP 3.3.7, device 2**. This was confirmed in the supervised device UI; a retained raw 0x55 diagnostic record is still pending.
+The vendor's read-only device-info request is **command `0x55`, payload `00`**, encoded as `AB 55 00 03 55 00 55`. Manfred's integrated connection flow uses `buildGetDeviceInfoPacket()` for an optional query with a three-second response limit, alongside the separate customer/profile lookup. The installed 0.5.2 build reconfirmed the earlier valid device response: **BT 1.1.9, ISP 3.3.7, device 2**. This was confirmed in the supervised device UI and a retained private raw AA14 `0x55` record (13-byte frame).
 
 For a `0x55` response with at least seven payload bytes, the vendor schema is:
 
@@ -143,7 +176,7 @@ After the real device read, a separate [official request with `deviceVersion=1.1
 
 ## Decisions for the next hardware test
 
-1. Preserve the verified BT 1.1.9 / ISP 3.3.7 / device 2 values and add the read-only 0x55 diagnostic record; retain TK8/0201 as separate profile fields.
+1. Preserve the verified BT 1.1.9 / ISP 3.3.7 / device 2 values and retained read-only 0x55 diagnostic record; retain TK8/0201 as separate profile fields.
 2. Give the vendor those versions and the current-version catalog result, then ask whether this firmware supports a JPEG shutter during media AP or live AP. No applicable update or capture-mode fix was offered by this lookup.
 3. Test the installed 0.5.2 Capture and fetch cycle while the intended voice app is foreground, then verify Tasker receipt and the existing-conversation handoff separately. App-button and glasses-initiated captures each saved one independently decoded 3200 x 2400 image in the supervised charged session; background operation remains unverified.
 4. Keep persistent AP capture and RTSP frame extraction experimental until each has measured image dimensions and repeatable delivery.
