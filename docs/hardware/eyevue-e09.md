@@ -1,6 +1,6 @@
 # EyeVue E09-family hardware profile: tested TK8 / 0201
 
-Engineering evidence recorded **2026-09-05**. This profile supports Manfred Companion's photo path; it is not a manufacturer specification sheet. Software reference: Manfred commit `84bf29f944374a81b715d671bc1cb18bcad60483` (integrated capture-and-fetch and read-only firmware support), with Capture and fetch selected by default in 0.5.1+9. The installed 0.5.2 build has reconfirmed the firmware versions below; full capture-and-fetch hardware acceptance remains in progress. See the [photo workflow and acceptance guide](../eyevue-photos.md).
+Engineering evidence recorded **2026-09-05**. This profile supports Manfred Companion's photo path; it is not a manufacturer specification sheet. Software reference: Manfred commit `84bf29f944374a81b715d671bc1cb18bcad60483` (integrated capture-and-fetch and read-only firmware support), with Capture and fetch selected by default in 0.5.1+9. The installed 0.5.2 build (source `212f98ba4f5f4d8ae110c034f2dca6f7965f9d73`) has reconfirmed the firmware versions below. Two capture-and-fetch cycles are verified below; background operation and the voice-app handoff remain unverified. See the [photo workflow and acceptance guide](../eyevue-photos.md).
 
 ## Identity and measured capabilities
 
@@ -68,13 +68,36 @@ During this interval, spontaneous `0x53` battery payloads were `00 10`, `00 0F`,
 
 The vendor app explicitly refuses **Wi-Fi import below 20%** (`view/photo/PhotoListFragment.java:705-707`) and **live streaming below 20%** (`view/home/HomeFragment.java:300-301`). Its battery listener stores the reported percentage in `iv6.h` at `HomeFragment.java:402`. The ordinary shutter handler at `HomeFragment.java:202-217` checks connection, recording, and importing state but has no battery check. No low-battery shutter rejection code was established in the reviewed response handling.
 
-Low power is therefore a plausible, **unproven** explanation for this attempt. Charge above the vendor's 20% import/live threshold, verify the reported level, and repeat the capture-and-fetch test before attributing failure to firmware AP/camera concurrency. This attempt does not prove that concurrency is the cause.
+Low power is therefore a plausible, **unproven** explanation for this attempt. This motivated the charged retest below before attributing failure to firmware AP/camera concurrency. This attempt does not prove that concurrency is the cause.
 
-## 0.5.2 charged retest: capture accepted, retrieval pending
+## 0.5.2 charged retest: two capture-and-fetch cycles verified
 
 On **2026-09-05 at 15:41:43 local time**, the installed **0.5.2** build's read-only battery query received command `0x17` with payload `34 30 01`: **40%, charging**. Unlike the `0x53` push encoding above, this response uses the low nibbles of its first two bytes as decimal digits and byte 2 as the charging flag. The same build reconfirmed **BT 1.1.9 / ISP 3.3.7 / device 2**, with profile TK8/0201.
 
-After unplugging, the reported level was **41%** and the initial album baseline reached Ready. At **15:45:49.997**, the shutter was accepted with `0x22 [01]` and photo-busy state 1. At **15:45:52.542**, the count advanced **29 to 30** and the camera returned idle, about **2.5 seconds** later. Manfred requested the AP rejoin automatically at **15:45:52.545**. This establishes an accepted offline capture in the charged retest; retrieval and a completed saved image remain pending in this record.
+After unplugging, the reported level was **41%** and the initial album baseline reached Ready. The first charged **app-button** capture-and-fetch cycle completed:
+
+| Local time, 2026-09-05 | Observed stage |
+| --- | --- |
+| 15:45:49.997 | Shutter accepted with `0x22 [01]`; photo-busy state 1 |
+| 15:45:52.542 | Count advanced **29 to 30** and camera returned idle, about 2.5 seconds after acceptance |
+| 15:45:52.545 | Manfred automatically requested the AP rejoin |
+| 15:46:25.253 | AP connected, **32.708 seconds** after the request |
+| 15:46:26.647 | Saved one new **3200 x 2400**, **354,704-byte** JPEG; no old album entries imported |
+| 15:46:32.495 | Transfer ended and camera Ready returned |
+
+Shutter-to-save time was **36.650 seconds**; the measured download/save operation took **498 ms**. Independent Windows `System.Drawing` decoding confirmed **3200 x 2400**. The local file's SHA-256 was `6e1581c55a5e3bb0dea0655c9df00b50aeb96dddae54b1c9d2c14da827c4b903`.
+
+A second, **glasses-initiated** capture also completed. The diagnostic sequence contains no preceding Manfred `shutter_requested` or AA13 command `0x22` write. Its first device capture event was `0x22 [01]` at **15:48:00.325**, followed by photo-busy at **15:48:00.327**. This establishes glasses-originated capture, not an exact timestamp of the user's physical button press.
+
+| Local time, 2026-09-05 | Second-cycle stage |
+| --- | --- |
+| 15:48:02.752 | Count advanced **30 to 31** and camera returned idle |
+| 15:48:02.754 | Manfred automatically requested the AP rejoin |
+| 15:48:28.963 | AP connected, **26.209 seconds** after the request |
+| 15:48:30.106 | Saved one new **3200 x 2400**, **263,400-byte** JPEG |
+| 15:48:35.992 | Transfer ended and camera Ready returned |
+
+First device capture event to saved image was **29.781 seconds**; download/save took **257 ms**. Independent Windows decoding again confirmed **3200 x 2400**, with SHA-256 `004341737d8f799a7a0fd342657f23f342a5f106618f31a3bff6ba1754dde54c`. There were exactly **two gallery files**, one from each new capture, with no historical album duplicates. These two supervised cycles verify app-button and glasses-initiated delivery in this session. Background operation, Tasker receipt, and an existing ChatGPT Live conversation handoff are still unverified.
 
 ## Firmware identification and update architecture
 
@@ -122,7 +145,7 @@ After the real device read, a separate [official request with `deviceVersion=1.1
 
 1. Preserve the verified BT 1.1.9 / ISP 3.3.7 / device 2 values and add the read-only 0x55 diagnostic record; retain TK8/0201 as separate profile fields.
 2. Give the vendor those versions and the current-version catalog result, then ask whether this firmware supports a JPEG shutter during media AP or live AP. No applicable update or capture-mode fix was offered by this lookup.
-3. Complete the installed 0.5.2 Capture and fetch retest: charged, unplugged offline capture now produced a fresh count and automatic AP rejoin request. Verify retrieval, decoded dimensions, and the committed saved image before accepting the complete cycle; repeatability remains untested.
+3. Test the installed 0.5.2 Capture and fetch cycle while the intended voice app is foreground, then verify Tasker receipt and the existing-conversation handoff separately. App-button and glasses-initiated captures each saved one independently decoded 3200 x 2400 image in the supervised charged session; background operation remains unverified.
 4. Keep persistent AP capture and RTSP frame extraction experimental until each has measured image dimensions and repeatable delivery.
 
 ## Reproducible source references
