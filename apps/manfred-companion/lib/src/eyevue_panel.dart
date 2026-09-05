@@ -114,8 +114,8 @@ class _EyevuePanelState extends State<EyevuePanel> {
                     onChanged: state.busy || state.sessionActive
                         ? null
                         : (String? value) {
-                            if (value != null) setState(() {
-                              => _startup = value);
+                            if (value != null) {
+                              setState(() => _startup = value);
                             }
                           },
                   ),
