@@ -1,0 +1,27 @@
+[Unit]
+Description=Manfred Frame vision receiver (Noa compatibility)
+Documentation=file://@MANFRED_RUNTIME_ROOT@/docs/ears.md
+After=manfred-ears-receiver.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Environment=MANFRED_VISION_HOST=@MANFRED_VISION_HOST@
+EnvironmentFile=@MANFRED_ENV_FILE@
+WorkingDirectory=@MANFRED_RUNTIME_ROOT@
+ExecStart=/usr/bin/env PYTHONPATH=@MANFRED_RUNTIME_ROOT@ @MANFRED_RUNTIME_ROOT@/.venv/bin/python -m manfred_ears serve-vision --host ${MANFRED_VISION_HOST} --port 8789 --log-level info
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=@MANFRED_STATE_DIR@
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+TasksMax=128
+
+[Install]
+WantedBy=default.target

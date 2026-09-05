@@ -1,0 +1,3 @@
+# Preserve large private source exports without expensive text diffs.
+raw/chatgpt/conversations-*.json -diff
+raw/*.docx binary
