@@ -310,12 +310,14 @@ class EyevuePlugin(
     }
 
 
-    private fun clearBatteryTelemetry() {
+    private fun clearBatteryTelemetry(cancelQuery: Boolean = true) {
         batteryGeneration++
         batteryObserverJob?.cancel()
         batteryObserverJob = null
-        batteryQueryJob?.cancel()
-        batteryQueryJob = null
+        if (cancelQuery) {
+            batteryQueryJob?.cancel()
+            batteryQueryJob = null
+        }
         battery = null
     }
 
@@ -886,7 +888,9 @@ class EyevuePlugin(
     private fun disconnect() {
         if (disconnecting) return
         disconnecting = true
-        clearBatteryTelemetry()
+        // Drain an accepted AA13 write before teardown sends another command.
+        val drainingBatteryQuery = batteryQueryJob
+        clearBatteryTelemetry(cancelQuery = false)
         firmwareGeneration++
         if (firmwareStatus == "reading") {
             firmwareStatus = "not_read"
@@ -896,6 +900,7 @@ class EyevuePlugin(
         stopSession()
         scope.launch {
             try {
+                drainingBatteryQuery?.join()
                 firmwareJob?.cancelAndJoin()
                 firmwareJob = null
                 connectionJob?.cancelAndJoin()
@@ -943,12 +948,14 @@ class EyevuePlugin(
         if (disposed) return
         stopScan()
         disposed = true
-        clearBatteryTelemetry()
+        val drainingBatteryQuery = batteryQueryJob
+        clearBatteryTelemetry(cancelQuery = false)
         methods.setMethodCallHandler(null)
         events.setStreamHandler(null)
         sink = null
         scope.launch {
             try {
+                drainingBatteryQuery?.join()
                 firmwareJob?.cancelAndJoin()
                 firmwareJob = null
                 connectionJob?.cancelAndJoin()
