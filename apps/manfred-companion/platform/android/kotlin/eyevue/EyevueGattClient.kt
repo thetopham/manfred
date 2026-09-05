@@ -84,6 +84,7 @@ class EyevueGattClient(
     private var serviceContinuation: CancellableContinuation<Unit>? = null
     private var descriptorContinuation: CancellableContinuation<Unit>? = null
     private var pendingWrite: CompletableDeferred<Boolean>? = null
+    private var pendingWriteCommand: Int? = null
 
     @SuppressLint("MissingPermission")
     private val callback = object : BluetoothGattCallback() {
@@ -182,7 +183,9 @@ class EyevueGattClient(
         ) {
             if (callbackGatt !== gatt) return
             val write = pendingWrite ?: return
+            Log.i(TAG, "event=aa13_ack command=" + pendingWriteCommand + " status=" + status)
             pendingWrite = null
+            pendingWriteCommand = null
             write.complete(status == BluetoothGatt.GATT_SUCCESS)
         }
 
@@ -352,9 +355,14 @@ class EyevueGattClient(
                 characteristic.value = packet
                 characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
                 val result = CompletableDeferred<Boolean>()
+                val command = packet.getOrNull(4)?.toInt()?.and(0xFF)
                 pendingWrite = result
+                pendingWriteCommand = command
+                Log.i(TAG, "event=aa13_write command=" + command + " bytes=" + packet.size)
                 if (!currentGatt.writeCharacteristic(characteristic)) {
                     pendingWrite = null
+                    pendingWriteCommand = null
+                    Log.w(TAG, "event=aa13_write_rejected command=" + command)
                     return@withLock Result.failure(IOException("Eyevue writeCharacteristic returned false"))
                 }
                 if (withTimeout(OPERATION_TIMEOUT_MS) { result.await() }) {
@@ -363,10 +371,15 @@ class EyevueGattClient(
                     Result.failure(IOException("Eyevue characteristic write failed"))
                 }
             } catch (timeout: TimeoutCancellationException) {
+                Log.w(TAG, "event=aa13_write_timeout command=" + pendingWriteCommand)
                 pendingWrite = null
+                pendingWriteCommand = null
                 Result.failure(IOException("Eyevue characteristic write timed out", timeout))
             } catch (error: Throwable) {
+                Log.w(TAG, "event=aa13_write_failed command=" + pendingWriteCommand +
+                    " failure=" + error.javaClass.simpleName)
                 pendingWrite = null
+                pendingWriteCommand = null
                 Result.failure(error)
             }
         }
@@ -386,6 +399,7 @@ class EyevueGattClient(
     private fun closeGatt() {
         val currentGatt = gatt
         gatt = null
+        pendingWriteCommand = null
         writeCharacteristic = null
         notifyCharacteristic = null
         photoNotifyCharacteristic = null

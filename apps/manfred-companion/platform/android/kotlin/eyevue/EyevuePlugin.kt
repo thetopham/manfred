@@ -75,6 +75,10 @@ class EyevuePlugin(
     private var firmwareError: String? = null
     private var firmwareGeneration = 0L
     private var firmwareJob: Job? = null
+    private var battery: EyevueBattery? = null
+    private var batteryGeneration = 0L
+    private var batteryObserverJob: Job? = null
+    private var batteryQueryJob: Job? = null
     private var latestImage: Map<String, Any?>? = null
     private var connectionJob: Job? = null
     private var sessionJob: Job? = null
@@ -96,6 +100,7 @@ class EyevuePlugin(
         scope.launch {
             gatt.state.collect { state ->
                 if (state == EyevueGattState.DISCONNECTED || state == EyevueGattState.ERROR) {
+                    clearBatteryTelemetry()
                     if (sessionActive && !disconnecting) failSession("The EyeVue Bluetooth connection was lost")
                     if (!connecting && !sessionActive && !disconnecting) status = "Disconnected"
                 }
@@ -164,6 +169,9 @@ class EyevuePlugin(
         },
         "firmwareStatus" to firmwareStatus,
         "firmwareError" to firmwareError,
+        "battery" to battery?.let {
+            linkedMapOf("percent" to it.percent, "charging" to it.isCharging)
+        },
     )
 
     private fun emitState() {
@@ -260,6 +268,7 @@ class EyevuePlugin(
         require(BluetoothAdapter.checkBluetoothAddress(normalized)) { "Select a valid Bluetooth address" }
         check(!connecting && !disconnecting && !sessionActive) { "Stop the current operation before connecting" }
         stopScan()
+        clearBatteryTelemetry()
         firmwareGeneration++
         firmwareJob?.cancel()
         firmwareJob = null
@@ -277,10 +286,12 @@ class EyevuePlugin(
             try {
                 gatt.connect(normalized).getOrThrow()
                 currentCoroutineContext().ensureActive()
+                observeBatteryTelemetry()
                 customer = awaitCustomer()
                 currentCoroutineContext().ensureActive()
                 preferences.edit().putString("address", normalized).apply()
                 readFirmwareInfo()
+                queryBattery()
                 status = "Connected - ${customer?.project ?: "EyeVue"}"
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -298,6 +309,65 @@ class EyevuePlugin(
         job.start()
     }
 
+
+    private fun clearBatteryTelemetry() {
+        batteryGeneration++
+        batteryObserverJob?.cancel()
+        batteryObserverJob = null
+        batteryQueryJob?.cancel()
+        batteryQueryJob = null
+        battery = null
+    }
+
+    private fun observeBatteryTelemetry() {
+        batteryObserverJob?.cancel()
+        val generation = batteryGeneration
+        batteryObserverJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            gatt.frames.collect { frame ->
+                val value = EyevueProtocol.parseBattery(frame) ?: return@collect
+                if (generation != batteryGeneration || disposed || disconnecting || !gatt.isConnected()) return@collect
+                if (battery != value) {
+                    battery = value
+                    Log.i("EyevuePower", "event=battery percent=" + value.percent + " charging=" + value.isCharging)
+                    emitState()
+                }
+            }
+        }
+    }
+
+    /** Vendor getDevicePower uses 0x17[00]; the prearmed observer also accepts 0x53 pushes. */
+    private fun queryBattery() {
+        batteryQueryJob?.cancel()
+        val generation = batteryGeneration
+        lateinit var owned: Job
+        owned = scope.launch(start = CoroutineStart.LAZY) {
+            try {
+                // The GATT transport owns the write timeout. A shorter wrapper could
+                // release its mutex before a late acknowledgement from the glasses.
+                currentCoroutineContext().ensureActive()
+                gatt.write(EyevueProtocol.buildGetBatteryPacket()).getOrThrow()
+                currentCoroutineContext().ensureActive()
+                if (generation == batteryGeneration) {
+                    Log.i("EyevuePower", "event=battery_query writeCompleted=true")
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                if (generation == batteryGeneration) {
+                    Log.w("EyevuePower", "event=battery_query failure=" + failure.javaClass.simpleName)
+                }
+            } finally {
+                if (batteryQueryJob === owned) batteryQueryJob = null
+            }
+        }
+        batteryQueryJob = owned
+        owned.start()
+    }
+
+    private fun capturePhase(phase: String) {
+        Log.i("EyevuePhotoSession", "event=capture_phase phase=" + phase +
+            " batteryPercent=" + (battery?.percent ?: "unknown"))
+    }
 
     /** Optional device information; never changes firmware and never fails a valid BLE connection. */
     private fun readFirmwareInfo() {
@@ -369,6 +439,12 @@ class EyevuePlugin(
         check(!sessionActive && sessionJob == null) { "A photo session is already active" }
         check(customer?.project?.uppercase()?.startsWith("TK8") == true) {
             "This photo session currently supports verified TK8 EyeVue glasses only"
+        }
+        battery?.let {
+            check(it.percent >= 20) {
+                "EyeVue battery is " + it.percent +
+                    "%. Charge the glasses to at least 20% before starting photo Wi-Fi."
+            }
         }
         stopScan()
         val id = UUID.randomUUID().toString()
@@ -490,6 +566,7 @@ class EyevuePlugin(
                     }
                 }
                 if (completed) {
+                    capturePhase("photo_complete")
                     captureReceipt?.complete(Unit)
                     completions.trySend(Unit)
                 }
@@ -497,6 +574,7 @@ class EyevuePlugin(
         }
 
         suspend fun openMedia(): EyevuePhotoSession {
+            capturePhase("ap_join_requested")
             closingAp = false
             val owned = EyevueApConnection(context) {
                 if (!closingAp) failSession("The EyeVue Wi-Fi connection was lost")
@@ -507,6 +585,7 @@ class EyevuePlugin(
             emitState()
             val ssid = awaitSsid("media")
             val network = owned.connect(ssid)
+            capturePhase("ap_connected")
             return EyevuePhotoSession(context, network).also { media = it }
         }
 
@@ -532,12 +611,14 @@ class EyevuePlugin(
                     }
                 } finally {
                     ownedAp?.close()
+                    capturePhase("phone_ap_released")
                 }
             }
         }
 
         try {
             val initial = openMedia().snapshot()
+            capturePhase("baseline_loaded")
             val tracker = EyevueNewPhotoTracker(initial)
             closeMedia(requireReceipt = true)
             while (true) {
@@ -546,8 +627,10 @@ class EyevuePlugin(
                 status = "Waiting for the glasses camera to become idle"
                 emitState()
                 awaitPhotoIdle()
+                capturePhase("photo_idle_received")
                 // Query after AP closure so an old count notification cannot arm the cycle.
                 gate.arm(awaitMediaCount())
+                capturePhase("capture_armed")
                 ready = true
                 status = "Ready - press the shutter to capture and fetch."
                 emitState()
@@ -588,6 +671,7 @@ class EyevuePlugin(
             Log.w("EyevuePhotoSession", "Capture cycle failed: " + failure.javaClass.simpleName)
         } finally {
             withContext(NonCancellable) {
+                capturePhase("session_closing")
                 ready = false
                 status = "Closing EyeVue capture session"
                 gate.disarm()
@@ -605,6 +689,7 @@ class EyevuePlugin(
                 } finally {
                     captureGate = null
                     captureMode = false
+                    capturePhase("session_closed")
                     sessionActive = false
                     sessionJob = null
                     error = sessionFailure
@@ -666,8 +751,10 @@ class EyevuePlugin(
             }
         }
         try {
+            capturePhase("ap_finish_requested")
             gatt.write(EyevueProtocol.buildFinishTransferPacket()).getOrThrow()
             reply.await()
+            capturePhase("ap_finish_receipt")
             // An observed sequencing response, not proof of AP shutdown.
             Unit
         } finally {
@@ -685,7 +772,11 @@ class EyevuePlugin(
                 withTimeout(15_000L) { receipt.await() }
             } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
                 if (sessionId == id && sessionActive && captureMode) {
-                    failSession("The glasses did not confirm a completed photo within 15 seconds")
+                    capturePhase("photo_confirmation_timeout")
+                    val powerContext = battery?.takeIf { it.percent < 20 }?.let {
+                        " Battery is " + it.percent + "%; low power may be contributing."
+                    } ?: ""
+                    failSession("The glasses did not confirm a completed photo within 15 seconds." + powerContext)
                 }
             } finally {
                 if (captureDeadlineJob === owned) captureDeadlineJob = null
@@ -702,6 +793,7 @@ class EyevuePlugin(
         val id = sessionId ?: throw IOException("The capture session is unavailable")
         ready = false
         status = "Sending shutter command"
+        capturePhase("shutter_requested")
         error = null
         beginCaptureDeadline(id)
         emitState()
@@ -794,6 +886,7 @@ class EyevuePlugin(
     private fun disconnect() {
         if (disconnecting) return
         disconnecting = true
+        clearBatteryTelemetry()
         firmwareGeneration++
         if (firmwareStatus == "reading") {
             firmwareStatus = "not_read"
@@ -850,6 +943,7 @@ class EyevuePlugin(
         if (disposed) return
         stopScan()
         disposed = true
+        clearBatteryTelemetry()
         methods.setMethodCallHandler(null)
         events.setStreamHandler(null)
         sink = null

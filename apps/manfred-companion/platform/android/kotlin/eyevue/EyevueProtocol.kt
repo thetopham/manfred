@@ -236,22 +236,26 @@ object EyevueProtocol {
     }
 
     fun parseBattery(frame: EyevueFrame): EyevueBattery? {
-        return when (frame.commandId) {
+        if (frame.payload.size < 2) return null
+        val battery = when (frame.commandId) {
             CMD_GET_BATTERY -> {
-                if (frame.payload.size < 2) null else EyevueBattery(
-                    percent = ((frame.payload[0].toInt() and 0x0F) * 10) +
-                        (frame.payload[1].toInt() and 0x0F),
-                    isCharging = frame.payload.getOrNull(2)?.toInt() == 1,
-                )
+                // Vendor 0x17 response encodes decimal digits in the low nibbles.
+                val tens = frame.payload[0].toInt() and 0x0F
+                val units = frame.payload[1].toInt() and 0x0F
+                if (tens > 10 || units > 9 || (tens == 10 && units != 0)) return null
+                val charging = frame.payload.getOrNull(2)?.toInt()?.and(0xFF) ?: 0
+                if (charging !in 0..1) return null
+                EyevueBattery(tens * 10 + units, charging == 1)
             }
             CMD_RECEIVE_BATTERY -> {
-                if (frame.payload.size < 2) null else EyevueBattery(
-                    percent = frame.payload[1].toInt() and 0xFF,
-                    isCharging = frame.payload[0].toInt() == 1,
-                )
+                // TK8 0x53 push: charging flag followed by an unsigned percentage.
+                val charging = frame.payload[0].toInt() and 0xFF
+                if (charging !in 0..1) return null
+                EyevueBattery(frame.payload[1].toInt() and 0xFF, charging == 1)
             }
-            else -> null
+            else -> return null
         }
+        return battery.takeIf { it.percent in 0..100 }
     }
 
     fun parseWifiSsid(frame: EyevueFrame): String? {

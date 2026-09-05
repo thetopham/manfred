@@ -93,6 +93,68 @@ class EyevueProtocolTest {
     }
 
     @Test
+    fun batteryQueryUsesVerifiedVendorGetDevicePowerCommand() {
+        assertArrayEquals(
+            byteArrayOf(0xAB.toByte(), 0x55, 0, 3, 0x17, 0, 0x17),
+            EyevueProtocol.buildGetBatteryPacket(),
+        )
+    }
+
+    @Test
+    fun parsesObservedTk8BatteryPushAsBinaryPercentage() {
+        for (percent in 13..16) {
+            val response = byteArrayOf(
+                0xAC.toByte(), 0x55, 0, 4, 0x53, 0, percent.toByte(), (0x53 + percent).toByte(),
+            )
+            assertEquals(
+                EyevueBattery(percent, false),
+                EyevueProtocol.parseBattery(EyevueProtocol.parseDatagram(response)),
+            )
+        }
+    }
+
+    @Test
+    fun batteryPushAcceptsChargingAndBoundaryPercentages() {
+        for (percent in listOf(0, 20, 100)) {
+            for (charging in 0..1) {
+                assertEquals(
+                    EyevueBattery(percent, charging == 1),
+                    EyevueProtocol.parseBattery(EyevueFrame(0x53, byteArrayOf(charging.toByte(), percent.toByte()))),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun batteryPushRejectsMalformedOrOutOfRangeTelemetry() {
+        for (payload in listOf(
+            byteArrayOf(), byteArrayOf(0), byteArrayOf(0, 101),
+            byteArrayOf(0, 0xff.toByte()), byteArrayOf(2, 50), byteArrayOf(0xff.toByte(), 50),
+        )) {
+            assertEquals(null, EyevueProtocol.parseBattery(EyevueFrame(0x53, payload)))
+        }
+        assertEquals(null, EyevueProtocol.parseBattery(EyevueFrame(0x52, byteArrayOf(0, 16))))
+    }
+
+    @Test
+    fun legacyBatteryResponseUsesDigitNibblesAndOptionalCharging() {
+        assertEquals(EyevueBattery(75, false), EyevueProtocol.parseBattery(EyevueFrame(0x17, byteArrayOf(7, 5))))
+        assertEquals(EyevueBattery(75, true), EyevueProtocol.parseBattery(EyevueFrame(0x17, byteArrayOf(7, 5, 1))))
+        assertEquals(EyevueBattery(100, false), EyevueProtocol.parseBattery(EyevueFrame(0x17, byteArrayOf(10, 0))))
+        assertEquals(EyevueBattery(75, false), EyevueProtocol.parseBattery(EyevueFrame(0x17, byteArrayOf(0x37, 0x35, 0))))
+    }
+
+    @Test
+    fun legacyBatteryRejectsMissingDigitsAndInvalidRanges() {
+        for (payload in listOf(
+            byteArrayOf(), byteArrayOf(7), byteArrayOf(10, 1),
+            byteArrayOf(15, 0), byteArrayOf(7, 15), byteArrayOf(7, 5, 2),
+        )) {
+            assertEquals(null, EyevueProtocol.parseBattery(EyevueFrame(0x17, payload)))
+        }
+    }
+
+    @Test
     fun voiceAssistantPacketsMatchVendorBitFlags() {
         assertArrayEquals(
             EyevueProtocol.valuePacket(EyevueProtocol.CMD_SET_VOICE_ASSISTANT_STATUS, 1),
