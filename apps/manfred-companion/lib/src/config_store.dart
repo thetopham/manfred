@@ -7,16 +7,22 @@ class CompanionConfig {
   const CompanionConfig({
     required this.endpoint,
     required this.receiverToken,
+    this.chatMirrorEndpoint = '',
+    this.chatMirrorToken = '',
     this.deviceId,
     this.validationCaptureEnabled = false,
   });
 
   final String endpoint;
   final String receiverToken;
+  final String chatMirrorEndpoint;
+  final String chatMirrorToken;
   final String? deviceId;
   final bool validationCaptureEnabled;
 
   bool get isComplete => endpoint.trim().isNotEmpty && receiverToken.trim().isNotEmpty;
+  bool get isChatMirrorComplete =>
+      chatMirrorEndpoint.trim().isNotEmpty && chatMirrorToken.trim().isNotEmpty;
 }
 
 class ConfigStore {
@@ -40,6 +46,8 @@ class ConfigStore {
       return CompanionConfig(
         endpoint: decoded['endpoint'] as String? ?? '',
         receiverToken: decoded['receiverToken'] as String? ?? '',
+        chatMirrorEndpoint: decoded['chatMirrorEndpoint'] as String? ?? '',
+        chatMirrorToken: decoded['chatMirrorToken'] as String? ?? '',
         deviceId: decoded['deviceId'] as String?,
         validationCaptureEnabled: decoded['validationCaptureEnabled'] as bool? ?? false,
       );
@@ -64,6 +72,8 @@ class ConfigStore {
         value: jsonEncode(<String, Object?>{
           'endpoint': config.endpoint.trim(),
           'receiverToken': config.receiverToken.trim(),
+          'chatMirrorEndpoint': config.chatMirrorEndpoint.trim(),
+          'chatMirrorToken': config.chatMirrorToken.trim(),
           'deviceId': config.deviceId,
           'validationCaptureEnabled': config.validationCaptureEnabled,
         }),

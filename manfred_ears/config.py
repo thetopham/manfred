@@ -25,11 +25,13 @@ class Settings:
     auth_token: str | None = None
     operator_token: str | None = None
     vision_token: str | None = None
+    chat_mirror_token: str | None = None
     min_sample_rate: int = 8_000
     max_sample_rate: int = 48_000
     max_body_bytes: int = 1_048_576
     max_vision_request_bytes: int = 8_388_608
     max_vision_image_bytes: int = 2_097_152
+    max_chat_mirror_body_bytes: int = 262_144
     episode_context_seconds: float = 15.0
     episode_finalize_grace_seconds: float = 2.0
     max_chunk_duration_seconds: float = 15.0
@@ -117,6 +119,7 @@ class Settings:
         token = os.environ.get("MANFRED_AUTH_TOKEN") or None
         operator_token = os.environ.get("MANFRED_OPERATOR_TOKEN") or None
         vision_token = os.environ.get("MANFRED_VISION_TOKEN") or None
+        chat_mirror_token = os.environ.get("MANFRED_CHAT_MIRROR_TOKEN") or None
         asr_backend = os.environ.get("MANFRED_ASR_BACKEND", "faster-whisper")
         default_model = (
             "nvidia/parakeet-unified-en-0.6b"
@@ -130,6 +133,7 @@ class Settings:
             auth_token=token,
             operator_token=operator_token,
             vision_token=vision_token,
+            chat_mirror_token=chat_mirror_token,
             min_sample_rate=int(os.environ.get("MANFRED_MIN_SAMPLE_RATE", "8000")),
             max_sample_rate=int(os.environ.get("MANFRED_MAX_SAMPLE_RATE", "48000")),
             max_body_bytes=int(os.environ.get("MANFRED_MAX_BODY_BYTES", "1048576")),
@@ -138,6 +142,9 @@ class Settings:
             ),
             max_vision_image_bytes=int(
                 os.environ.get("MANFRED_MAX_VISION_IMAGE_BYTES", "2097152")
+            ),
+            max_chat_mirror_body_bytes=int(
+                os.environ.get("MANFRED_MAX_CHAT_MIRROR_BODY_BYTES", "262144")
             ),
             episode_context_seconds=float(
                 os.environ.get("MANFRED_EPISODE_CONTEXT_SECONDS", "15")

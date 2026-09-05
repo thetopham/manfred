@@ -38,4 +38,10 @@ Review the plan before a later authorized `apply`. `apply` copies only owned run
 
 A future cutover must review the actual service account, host mappings, state path and permissions, installed dependency backend, rendered unit diff, and rollback runtime before daemon-reload/restart. Source separation itself does not warrant an archive transfer. The Brain mirror directory must be dedicated, writable, and on a filesystem supporting atomic directory exchange.
 
-Chat Mirror is retained as a separate unmerged candidate by the extraction owner. Its branch predates newer archive/deletion/deployment fixes and must be reconciled before adoption. Current source provenance is Brain commit `595671676933d13a3065f88e1f3e25b858ace556`.
+## Chat Mirror draft
+
+This follow-up reconciles the existing ChatGPT Android Accessibility mirror into Manfred. It adds the narrow capture observer, durable native/Flutter spool, exact-byte archive, and independently authenticated receiver/operator routes. The receiver uses its own `MANFRED_CHAT_MIRROR_TOKEN`, host setting, and port 8790. The data-plane installer renders its unit but does not enable it or write its token. Audio, vision, operator, and Chat Mirror capabilities remain separately authenticated.
+
+Chat Mirror observations stay in Manfred. This draft does not add Chat Mirror text to Brain's wearable export: the existing configured Markdown export contract remains unchanged. Observation completeness/provisional status must not be represented as an official complete ChatGPT transcript. Actual Accessibility behavior, phone installation, capture completeness, and physical Eyes/CyanBridge integration remain unverified.
+
+See [reconciliation and validation](docs/chat-mirror/RECONCILIATION.md) and the exact 26-file source mapping in `docs/chat-mirror/PROVENANCE.json`. The original extraction manifest describes baseline 36af66a; this candidate manifest records the follow-up. No live runtime or device activation is part of this draft.

@@ -84,6 +84,19 @@ class ManfredRuntimeInstallTests(unittest.TestCase):
                 installer.apply(args)
             self.assertEqual(list(outside.iterdir()), [])
 
+    def test_chat_mirror_unit_is_rendered_for_data_plane_with_distinct_ingest_capability(self):
+        with tempfile.TemporaryDirectory() as raw:
+            args = self.args(Path(raw), "manfred-data-plane")
+            args.chat_mirror_host = "127.0.0.1"
+            self.assertIn("manfred-chat-mirror-receiver.service", installer.ROLE_UNITS[args.role])
+            self.assertNotIn("manfred-chat-mirror-receiver.service", installer.ROLE_UNITS["demerzel"])
+            unit = installer.render_unit("manfred-chat-mirror-receiver.service", args).decode()
+            self.assertIn("Environment=MANFRED_CHAT_MIRROR_HOST=127.0.0.1", unit)
+            self.assertIn("serve-chat-mirror --host ${MANFRED_CHAT_MIRROR_HOST} --port 8790", unit)
+            self.assertIn(f"EnvironmentFile={args.env_file}", unit)
+            self.assertIn(f"PYTHONPATH={args.runtime_root}", unit)
+            self.assertNotIn("@MANFRED_", unit)
+
     def test_environment_selects_independent_runtime_and_export_inbox(self):
         with mock.patch.dict(os.environ, {
             "MANFRED_RUNTIME_ROOT": "/configured/manfred",

@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
 import 'audio_pipeline.dart';
+import 'chat_mirror.dart';
 import 'chunk_spool.dart';
 import 'config_store.dart';
 import 'foreground_service.dart';
@@ -48,26 +50,36 @@ class BridgeController extends ChangeNotifier {
   BridgeController({
     ConfigStore? configStore,
     ForegroundBridgeService? foregroundService,
+    NativeChatMirrorBridge? nativeChatMirrorBridge,
   })  : _configStore = configStore ?? ConfigStore(),
-        _foregroundService = foregroundService ?? ForegroundBridgeService();
+        _foregroundService = foregroundService ?? ForegroundBridgeService(),
+        _nativeChatMirrorBridge =
+            nativeChatMirrorBridge ?? MethodChannelNativeChatMirrorBridge();
 
   final ConfigStore _configStore;
   final ForegroundBridgeService _foregroundService;
+  final NativeChatMirrorBridge _nativeChatMirrorBridge;
   CompanionConfig _config = const CompanionConfig(endpoint: '', receiverToken: '');
   ChunkSpool? _spool;
+  ChatMirrorSpool? _chatMirrorSpool;
   OmiBleTransport? _ble;
   ManfredUploader? _uploader;
+  ChatMirrorUploader? _chatMirrorUploader;
   OmiAudioDecoder? _decoder;
   PcmChunker? _chunker;
   Directory? _supportDirectory;
   ValidationEvidenceArchive? _validationEvidence;
   String? _validationEvidencePath;
   Timer? _retryTimer;
+  Timer? _chatMirrorTimer;
   GenerationPacketSerial _packetSerial = GenerationPacketSerial();
   final BackgroundDrainCoordinator _drainCoordinator = BackgroundDrainCoordinator();
   final BridgeStopCoordinator _stopCoordinator = BridgeStopCoordinator();
   final PendingCount _pendingCount = PendingCount();
   final UploadLease _uploadLease = UploadLease();
+  Future<void>? _chatMirrorSyncFuture;
+  final Set<String> _rejectedChatMirrorEventIds = <String>{};
+  bool _chatMirrorDeleteRequested = false;
   bool _running = false;
   String _bleStatus = 'idle';
   String? _lastError;
@@ -78,6 +90,9 @@ class BridgeController extends ChangeNotifier {
   int _nextPacketSequence = 0;
   int _stalePacketsDropped = 0;
   int _validationWriteErrors = 0;
+  int _queuedChatMirrorEvents = 0;
+  bool _chatMirrorAccessibilityEnabled = false;
+  String _chatMirrorStatus = 'not configured';
 
   CompanionConfig get config => _config;
   bool get running => _running;
@@ -92,6 +107,9 @@ class BridgeController extends ChangeNotifier {
   String? get validationEvidencePath => _validationEvidencePath;
   int get stalePacketsDropped => _stalePacketsDropped;
   int get validationWriteErrors => _validationWriteErrors;
+  int get queuedChatMirrorEvents => _queuedChatMirrorEvents;
+  bool get chatMirrorAccessibilityEnabled => _chatMirrorAccessibilityEnabled;
+  String get chatMirrorStatus => _chatMirrorStatus;
 
   Future<void> initialize() async {
     initializeForegroundCommunication();
@@ -105,17 +123,26 @@ class BridgeController extends ChangeNotifier {
     }
     _spool = ChunkSpool(Directory('${support.path}/manfred-spool'));
     await _spool!.initialize();
+    _chatMirrorSpool = ChatMirrorSpool(
+      Directory('${support.path}/manfred-chat-mirror-spool'),
+    );
+    await _chatMirrorSpool!.initialize();
+    _configureChatMirrorUploader();
     await _refreshQueued();
     final bool uploaderReady = _ensureUploader();
     if (uploaderReady && _pendingCount.value > 0) {
       _scheduleFreshDrain();
     }
+    _startChatMirrorTimer();
     notifyListeners();
+    unawaited(syncChatMirror());
   }
 
   Future<void> saveConfig({
     required String endpoint,
     required String token,
+    String? chatMirrorEndpoint,
+    String? chatMirrorToken,
     bool? validationCaptureEnabled,
   }) async {
     if (_running) {
@@ -123,10 +150,31 @@ class BridgeController extends ChangeNotifier {
     }
     final String normalizedEndpoint = endpoint.trim();
     final String normalizedToken = token.trim();
-    ManfredEndpoint.parse(normalizedEndpoint);
+    if (normalizedEndpoint.isEmpty != normalizedToken.isEmpty) {
+      throw const FormatException(
+        'Audio receiver endpoint and token must both be configured or both be blank',
+      );
+    }
+    if (normalizedEndpoint.isNotEmpty) {
+      ManfredEndpoint.parse(normalizedEndpoint);
+    }
+    final String normalizedChatEndpoint =
+        (chatMirrorEndpoint ?? _config.chatMirrorEndpoint).trim();
+    final String normalizedChatToken =
+        (chatMirrorToken ?? _config.chatMirrorToken).trim();
+    if (normalizedChatEndpoint.isEmpty != normalizedChatToken.isEmpty) {
+      throw const FormatException(
+        'Chat Mirror endpoint and token must both be configured or both be blank',
+      );
+    }
+    if (normalizedChatEndpoint.isNotEmpty) {
+      ChatMirrorEndpoint.parse(normalizedChatEndpoint);
+    }
     final CompanionConfig nextConfig = CompanionConfig(
       endpoint: normalizedEndpoint,
       receiverToken: normalizedToken,
+      chatMirrorEndpoint: normalizedChatEndpoint,
+      chatMirrorToken: normalizedChatToken,
       deviceId: _config.deviceId,
       validationCaptureEnabled:
           validationCaptureEnabled ?? _config.validationCaptureEnabled,
@@ -137,6 +185,8 @@ class BridgeController extends ChangeNotifier {
     if (_pendingCount.value > 0) {
       _scheduleFreshDrain();
     }
+    _configureChatMirrorUploader();
+    await syncChatMirror();
     notifyListeners();
   }
 
@@ -155,6 +205,8 @@ class BridgeController extends ChangeNotifier {
     _config = CompanionConfig(
       endpoint: _config.endpoint,
       receiverToken: _config.receiverToken,
+      chatMirrorEndpoint: _config.chatMirrorEndpoint,
+      chatMirrorToken: _config.chatMirrorToken,
       deviceId: device.id,
       validationCaptureEnabled: _config.validationCaptureEnabled,
     );
@@ -520,6 +572,131 @@ class BridgeController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _startChatMirrorTimer() {
+    _chatMirrorTimer?.cancel();
+    _chatMirrorTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => unawaited(syncChatMirror()),
+    );
+  }
+
+  void _configureChatMirrorUploader() {
+    _rejectedChatMirrorEventIds.clear();
+    _chatMirrorUploader?.close();
+    _chatMirrorUploader = null;
+    if (_config.isChatMirrorComplete) {
+      _chatMirrorUploader = ChatMirrorUploader(
+        endpoint: ChatMirrorEndpoint.parse(_config.chatMirrorEndpoint),
+        receiverToken: _config.chatMirrorToken,
+      );
+      _chatMirrorStatus = 'configured';
+    } else {
+      _chatMirrorStatus = 'not configured';
+    }
+  }
+
+  Future<void> openChatMirrorAccessibilitySettings() async {
+    await _nativeChatMirrorBridge.openAccessibilitySettings();
+  }
+
+  Future<void> syncChatMirror() {
+    final Future<void>? current = _chatMirrorSyncFuture;
+    if (current != null) {
+      return current;
+    }
+    late final Future<void> operation;
+    operation = _syncChatMirrorOnce().whenComplete(() {
+      if (identical(_chatMirrorSyncFuture, operation)) {
+        _chatMirrorSyncFuture = null;
+      }
+    });
+    _chatMirrorSyncFuture = operation;
+    return operation;
+  }
+
+  Future<void> _syncChatMirrorOnce() async {
+    final ChatMirrorSpool? spool = _chatMirrorSpool;
+    if (spool == null) {
+      return;
+    }
+    try {
+      _chatMirrorAccessibilityEnabled = await _nativeChatMirrorBridge.isEnabled();
+      final ChatMirrorImportCoordinator importer = ChatMirrorImportCoordinator(
+        nativeBridge: _nativeChatMirrorBridge,
+        spool: spool,
+      );
+      final int imported = await importer.importOnce();
+      final ChatMirrorUploader? uploader = _chatMirrorUploader;
+      ChatMirrorDrainResult drainResult = const ChatMirrorDrainResult(
+        uploaded: 0,
+        newlyRejected: 0,
+        retainedRejected: 0,
+      );
+      if (uploader != null) {
+        drainResult = await drainChatMirrorSpool(
+          spool: spool,
+          uploader: uploader,
+          rejectedEventIds: _rejectedChatMirrorEventIds,
+          shouldStop: () => _chatMirrorDeleteRequested,
+        );
+      }
+      _queuedChatMirrorEvents = (await spool.pending()).length;
+      final String rejectionSuffix = drainResult.retainedRejected > 0
+          ? '; ${drainResult.retainedRejected} rejected retained'
+          : '';
+      _chatMirrorStatus = uploader == null
+          ? (_chatMirrorAccessibilityEnabled
+              ? 'capturing locally; receiver not configured'
+              : 'accessibility disabled; receiver not configured')
+          : (_chatMirrorAccessibilityEnabled
+              ? 'active${imported > 0 ? '; imported $imported' : ''}$rejectionSuffix'
+              : 'receiver ready; accessibility disabled$rejectionSuffix');
+    } on MissingPluginException {
+      _chatMirrorStatus = 'native Accessibility bridge unavailable';
+    } catch (error) {
+      _chatMirrorStatus = 'error: $error';
+      _recordError(error);
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  Future<void> deletePendingChatMirror() async {
+    final ChatMirrorSpool? spool = _chatMirrorSpool;
+    if (spool == null) {
+      return;
+    }
+    _chatMirrorDeleteRequested = true;
+    _chatMirrorTimer?.cancel();
+    _chatMirrorTimer = null;
+    final ChatMirrorUploader? activeUploader = _chatMirrorUploader;
+    _chatMirrorUploader = null;
+    activeUploader?.close();
+    bool deleted = false;
+    try {
+      await _chatMirrorSyncFuture;
+      final ChatMirrorImportCoordinator importer = ChatMirrorImportCoordinator(
+        nativeBridge: _nativeChatMirrorBridge,
+        spool: spool,
+      );
+      await importer.deleteNativePending();
+      await spool.deleteAll();
+      _rejectedChatMirrorEventIds.clear();
+      _queuedChatMirrorEvents = 0;
+      deleted = true;
+    } finally {
+      _chatMirrorDeleteRequested = false;
+      _configureChatMirrorUploader();
+      if (deleted) {
+        _chatMirrorStatus = _chatMirrorAccessibilityEnabled
+            ? 'active; queue deleted'
+            : 'accessibility disabled; queue deleted';
+      }
+      _startChatMirrorTimer();
+      notifyListeners();
+    }
+  }
+
   Future<void> _refreshQueued() async {
     final int revision = _pendingCount.beginReconciliation();
     final int actual = (await _spool?.pending() ?? const <PendingChunk>[]).length;
@@ -593,9 +770,11 @@ class BridgeController extends ChangeNotifier {
   @override
   void dispose() {
     _retryTimer?.cancel();
+    _chatMirrorTimer?.cancel();
     _decoder?.dispose();
     _uploadLease.invalidate();
     _uploader?.close();
+    _chatMirrorUploader?.close();
     super.dispose();
   }
 }

@@ -15,6 +15,8 @@ void main() {
     const CompanionConfig expected = CompanionConfig(
       endpoint: 'http://100.64.0.10:8787/audio',
       receiverToken: 'receiver-token',
+      chatMirrorEndpoint: 'http://100.64.0.10:8790/chat-mirror',
+      chatMirrorToken: 'chat-token',
       deviceId: 'omi-device',
       validationCaptureEnabled: true,
     );
@@ -24,6 +26,8 @@ void main() {
 
     expect(actual.endpoint, expected.endpoint);
     expect(actual.receiverToken, expected.receiverToken);
+    expect(actual.chatMirrorEndpoint, expected.chatMirrorEndpoint);
+    expect(actual.chatMirrorToken, expected.chatMirrorToken);
     expect(actual.deviceId, expected.deviceId);
     expect(actual.validationCaptureEnabled, isTrue);
   });

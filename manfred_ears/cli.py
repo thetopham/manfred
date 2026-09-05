@@ -68,6 +68,21 @@ def cmd_serve_vision(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve_chat_mirror(args: argparse.Namespace) -> int:
+    import uvicorn
+
+    from .service import create_chat_mirror_receiver_app
+
+    settings = _settings(args)
+    uvicorn.run(
+        create_chat_mirror_receiver_app(settings),
+        host=args.host,
+        port=args.port,
+        log_level=args.log_level,
+    )
+    return 0
+
+
 def cmd_ingest_wav(args: argparse.Namespace) -> int:
     archive = AudioArchive(_settings(args))
     source = Path(args.audio)
@@ -182,6 +197,15 @@ def build_parser() -> argparse.ArgumentParser:
     vision.add_argument("--port", type=int, default=8789)
     vision.add_argument("--log-level", default="info")
     vision.set_defaults(func=cmd_serve_vision)
+
+    chat_mirror = sub.add_parser(
+        "serve-chat-mirror",
+        help="Run receiver-only POST /chat-mirror Accessibility observation surface",
+    )
+    chat_mirror.add_argument("--host", default="127.0.0.1")
+    chat_mirror.add_argument("--port", type=int, default=8790)
+    chat_mirror.add_argument("--log-level", default="info")
+    chat_mirror.set_defaults(func=cmd_serve_chat_mirror)
 
     ingest = sub.add_parser("ingest-wav", help="Replay a mono PCM16 WAV through the chunk archive")
     ingest.add_argument("audio")

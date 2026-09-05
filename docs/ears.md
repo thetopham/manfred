@@ -24,6 +24,26 @@ Omi Dev Kit 2
 
 The companion source lives at `../apps/manfred-companion/`. A bounded Frame bootstrap accepts tap-triggered Noa custom-server JPEGs into a separate vision receiver. Each accepted image now creates a durable image-centered multimodal episode that waits for its future context window, then references the original JPEG, overlapping Omi chunks, the latest overlapping transcript segments, and explicit Frame trigger events. It deliberately does **not** yet implement periodic/continuous Frame capture in the companion, adaptive episode boundaries, visual model inference, custom Omi firmware, automatic durable-memory promotion, or a production Supabase migration.
 
+## ChatGPT Conversation Mirror MVP
+
+ChatGPT Android Live remains the initial realtime cognition interface because it carries the user's existing ChatGPT account context. Manfred Companion adds a deliberately narrow Accessibility service restricted to package `com.openai.chatgpt`; it observes rendered window text but performs no UI actions and never accesses ChatGPT authentication or private APIs.
+
+Each bounded Accessibility observation is committed to app-private native storage, imported into an atomic Flutter spool, hash-checked immediately before upload, and sent to a fourth receiver-only capability:
+
+```text
+ChatGPT Android UI/history
+→ ChatGPT-only Accessibility snapshot
+→ native app-private commit
+→ Flutter Chat Mirror spool
+→ POST /chat-mirror on tailnet port 8790
+→ exact JSON evidence + sidecar + SQLite/FTS index
+→ operator search/session retrieval/delete
+```
+
+The receiver requires a dedicated `MANFRED_CHAT_MIRROR_TOKEN`, `Idempotency-Key`, and `X-Manfred-Content-SHA256`. It rejects changed-body key reuse and changed evidence for an existing `(mirror_session_id, sequence_number)`. Accessibility text is indexed as a versioned `android-accessibility` observation with explicit `partial`/`gap`/`complete` and `provisional`/`final` metadata; it is not mislabeled as an official ChatGPT transcript.
+
+This software slice does not yet prove that the real ChatGPT app exposes complete dialogue through Android Accessibility, that Live session boundaries can be reconstructed exactly, or that EyeVue custom-BLE Opus can coexist with HFP audio. Those remain physical acceptance gates.
+
 ## Frame bootstrap: Noa custom-server compatibility
 
 Noa already captures one Frame JPEG plus short Frame-microphone audio after a tap interaction and can POST both to a custom endpoint. Manfred uses that as a disposable physical bootstrap while the durable Frame connector is added to Manfred Companion:
@@ -125,6 +145,9 @@ raw/YYYY-MM-DD/<session>/       original received PCM16 webhook bodies
 vision/raw/YYYY-MM-DD/          exact Frame JPEGs + crash-recoverable sidecars
   frame-<digest>.jpg
   frame-<digest>.json
+chat-mirror/raw/YYYY-MM-DD/     exact Accessibility observation JSON + sidecars
+  chat-<digest>.json
+  chat-<digest>.meta.json
 events/YYYY-MM-DD/              immutable rolling-window events and canonical transcript versions
 wiki-inbox/YYYY-MM-DD.md        local scratch for nightly distillation
 audit/events.jsonl              bounded operational events without raw uid/text
@@ -195,7 +218,7 @@ Uncompressed 16 kHz mono PCM16 is 2,764,800,000 bytes/day: about **2.575 GiB/day
 
 ## API isolation and authentication
 
-The service is split into three independent FastAPI applications and ports.
+The service is split into four independent FastAPI applications and ports.
 
 **Receiver app — tailnet target for Manfred Companion:**
 
@@ -207,11 +230,14 @@ Direct companion requests add a complete all-or-nothing header set: capture sess
 **Operator app — loopback/tailnet only:**
 
 - `GET /health` — non-sensitive liveness and ASR identity.
-- `GET /v1/status` — audio/visual counts plus pending, ready, and dirty episode counts.
+- `GET /v1/status` — audio, visual, Chat Mirror, and episode counts.
 - `POST /v1/sessions/{id}/flush` — create or reuse the session's final full-session Silero-VAD + ASR canonical transcript; `force=true` deliberately bypasses reuse and creates a new full-session transcript version for operator reprocessing.
 - `GET /v1/search?q=...` — SQLite FTS5 retrieval over the latest canonical transcript plus unreconciled near-live segments, each with state and provenance.
 - `POST /v1/episodes/refresh` — bounded operator-triggered materialization of due/dirty image-centered episodes.
 - `GET /v1/episodes` and `GET /v1/episodes/{id}` — retrieve episode reference sets, timing quality, and versions without copying raw evidence.
+- `GET /v1/chat-mirror/search?q=...` — FTS retrieval over mirrored Accessibility observations.
+- `GET /v1/chat-mirror/sessions/{id}` — ordered raw-observation metadata and exact-evidence references for one mirrored session.
+- `DELETE /v1/chat-mirror/sessions/{id}` — explicit mirrored-session evidence and index deletion.
 - `DELETE /v1/sessions/{id}` — explicit evidence/transcript deletion; affected episodes are rematerialized.
 - `DELETE /v1/vision/{id}` — explicit JPEG, sidecar, and visual timeline deletion.
 - No `/audio` route exists on this app.
@@ -224,7 +250,14 @@ Direct companion requests add a complete all-or-nothing header set: capture sess
 - No `/audio`, `/health`, `/v1/*`, docs, OpenAPI, search, status, or delete route exists on this app.
 - Uses a third high-entropy token so Noa cannot authorize audio ingestion or operator actions.
 
-The audio receiver refuses startup unless `MANFRED_AUTH_TOKEN` is configured. The operator independently refuses startup unless `MANFRED_OPERATOR_TOKEN` is configured. The vision receiver independently refuses startup unless `MANFRED_VISION_TOKEN` is configured. The companion receiver token grants only audio ingestion and cannot authorize status, search, re-transcription, or deletion. Operator calls use the standard Bearer authorization header or `X-Manfred-Operator-Token`; query-string operator tokens are intentionally unsupported.
+**Chat Mirror receiver — tailnet-only Accessibility observation surface:**
+
+- `POST /chat-mirror` — bounded UTF-8 JSON observation body retained byte-for-byte before indexing.
+- Requires `X-Manfred-Chat-Token` or Bearer authorization plus `Idempotency-Key` and `X-Manfred-Content-SHA256`; query tokens are unsupported.
+- Accepts only the versioned ChatGPT-only Accessibility schema and exposes no audio, vision, operator, docs, OpenAPI, status, search, or delete route.
+- Uses a fourth high-entropy token that cannot authorize audio, vision, or operator actions.
+
+The audio receiver refuses startup unless `MANFRED_AUTH_TOKEN` is configured. The operator independently refuses startup unless `MANFRED_OPERATOR_TOKEN` is configured. The vision receiver independently refuses startup unless `MANFRED_VISION_TOKEN` is configured. The Chat Mirror receiver independently refuses startup unless `MANFRED_CHAT_MIRROR_TOKEN` is configured. Audio, vision, and Chat Mirror clients receive ingestion-only capabilities and cannot authorize status, search, re-transcription, or deletion. Operator calls use the standard Bearer authorization header or `X-Manfred-Operator-Token`; query-string operator tokens are intentionally unsupported.
 
 The receiver rejects a declared oversized `Content-Length` before reading and also streams the body through a hard byte counter, so missing or dishonest length headers cannot cause the application to accumulate an unbounded body. `token=` remains compatible with Omi's stock webhook. Manfred Companion instead uses `X-Manfred-Token`, keeping the receiver secret out of URLs/access logs, and stores it in Android secure storage.
 
@@ -239,6 +272,7 @@ export HF_HOME="$MANFRED_STATE_DIR/models/huggingface"
 export MANFRED_AUTH_TOKEN='<high-entropy-receiver-token>'
 export MANFRED_OPERATOR_TOKEN='<different-high-entropy-operator-token>'
 export MANFRED_VISION_TOKEN='<third-high-entropy-vision-token>'
+export MANFRED_CHAT_MIRROR_TOKEN='<fourth-high-entropy-chat-ingest-token>'
 export MANFRED_ASR_MODEL=large-v3-turbo
 export MANFRED_ASR_DEVICE=cpu
 export MANFRED_ASR_COMPUTE_TYPE=int8
@@ -250,9 +284,12 @@ python3 -m manfred_ears serve-operator --host 127.0.0.1 --port 8788
 
 # Terminal 3: bind only to the S25-reachable tailnet address.
 python3 -m manfred_ears serve-vision --host 100.x.y.z --port 8789
+
+# Terminal 4: separate ChatGPT Accessibility observation capability.
+python3 -m manfred_ears serve-chat-mirror --host 100.x.y.z --port 8790
 ```
 
-No Funnel is needed. Keep all ports tailnet/local-only, with audio, vision, and operator tokens scoped independently.
+No Funnel is needed. Keep all ports tailnet/local-only, with audio, vision, Chat Mirror, and operator tokens scoped independently.
 
 In Noa's **Tune → Server → Custom Server** fields use:
 
@@ -266,7 +303,7 @@ Noa captures after the first tap and submits after the finishing tap. A successf
 
 ## Always-on 7090 deployment and Demerzel link
 
-`7090` is the canonical Manfred evidence data plane. It owns raw audio and Frame JPEGs, the shared SQLite archive, transcript versions, event records, Hugging Face model cache, receiver apps, operator API, and rolling CPU ASR. The audio receiver binds only `7090`'s Tailscale address (`100.112.32.64:8787`), the optional vision receiver uses tailnet port `8789`, and the authenticated operator API remains loopback-only on `127.0.0.1:8788`.
+`7090` is the canonical Manfred evidence data plane. It owns raw audio, Frame JPEGs, ChatGPT Accessibility observations, the shared SQLite archive, transcript versions, event records, Hugging Face model cache, receiver apps, operator API, and rolling CPU ASR. The audio receiver binds only `7090`'s Tailscale address (`100.112.32.64:8787`), vision uses tailnet port `8789`, Chat Mirror uses tailnet port `8790`, and the authenticated operator API remains loopback-only on `127.0.0.1:8788`.
 
 Demerzel remains the control and knowledge plane through two deliberately narrow links:
 
@@ -281,6 +318,7 @@ Tracked deployment artifacts live under `deploy/`:
 systemd/manfred-ears-receiver.service   7090 receiver + rolling ASR worker; host comes from env
 systemd/manfred-ears-operator.service   7090 loopback authenticated operator API
 systemd/manfred-vision-receiver.service 7090 receiver-only Noa compatibility surface
+systemd/manfred-chat-mirror-receiver.service 7090 receiver-only ChatGPT observation surface
 systemd/manfred-ears.env.example        non-secret 7090 environment template
 systemd/manfred-ears-forward.socket     Demerzel legacy endpoint listener
 systemd/manfred-ears-forward.service    Demerzel TCP proxy to 7090
@@ -289,7 +327,7 @@ systemd/manfred-ears-wiki-sync.timer    five-minute mirror plus exact 23:52 pre-
 manfred_wiki_sync.py                    fail-closed rsync/validation/publish implementation
 ```
 
-The live per-user units are installed under `~/.config/systemd/user/`. `loginctl` linger must be enabled on both hosts so they survive logout and start without an interactive session. The real environment file is `~/.config/manfred-ears/manfred-ears.env`, mode `0600`; never commit it. Audio, vision, and operator capabilities use three different high-entropy tokens. The faster-whisper adapter explicitly pins English for multilingual Whisper models. `HF_HOME` stays under the canonical state root so model restore/migration remains self-contained.
+The live per-user units are installed under `~/.config/systemd/user/`. `loginctl` linger must be enabled on both hosts so they survive logout and start without an interactive session. The real environment file is `~/.config/manfred-ears/manfred-ears.env`, mode `0600`; never commit it. Audio, vision, Chat Mirror, and operator capabilities use four different high-entropy tokens. The faster-whisper adapter explicitly pins English for multilingual Whisper models. `HF_HOME` stays under the canonical state root so model restore/migration remains self-contained.
 
 On `7090`, run from `ingestion/manfred-ears/` after copying the code, state, and secret environment file:
 
@@ -297,11 +335,13 @@ On `7090`, run from `ingestion/manfred-ears/` after copying the code, state, and
 set -euo pipefail
 systemd-analyze --user verify deploy/systemd/manfred-ears-receiver.service \
   deploy/systemd/manfred-ears-operator.service \
-  deploy/systemd/manfred-vision-receiver.service
+  deploy/systemd/manfred-vision-receiver.service \
+  deploy/systemd/manfred-chat-mirror-receiver.service
 install -d -m 0700 "$HOME/.config/systemd/user" "$HOME/.config/manfred-ears"
 install -m 0644 deploy/systemd/manfred-ears-receiver.service \
   deploy/systemd/manfred-ears-operator.service \
-  deploy/systemd/manfred-vision-receiver.service "$HOME/.config/systemd/user/"
+  deploy/systemd/manfred-vision-receiver.service \
+  deploy/systemd/manfred-chat-mirror-receiver.service "$HOME/.config/systemd/user/"
 test -s "$HOME/.config/manfred-ears/manfred-ears.env"
 chmod 0600 "$HOME/.config/manfred-ears/manfred-ears.env"
 systemctl --user daemon-reload
@@ -312,6 +352,10 @@ curl http://127.0.0.1:8788/health
 # Enable only after MANFRED_VISION_TOKEN is set and a Noa physical test is ready.
 systemctl --user enable --now manfred-vision-receiver.service
 systemctl --user is-active manfred-vision-receiver.service
+
+# Enable only after MANFRED_CHAT_MIRROR_TOKEN is set and the private APK is ready.
+systemctl --user enable --now manfred-chat-mirror-receiver.service
+systemctl --user is-active manfred-chat-mirror-receiver.service
 ```
 
 On Demerzel, disable the former receiver/operator only after the stopped-state final rsync succeeds, then install the forwarder and Wiki mirror:
