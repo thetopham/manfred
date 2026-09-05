@@ -72,6 +72,14 @@ class ManfredRuntimeInstallTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "source differs"):
                 installer.check(args)
 
+    def test_check_rejects_launcher_with_execute_permission_removed(self):
+        with tempfile.TemporaryDirectory() as raw:
+            args = self.args(Path(raw))
+            installer.apply(args)
+            (args.bin_dir / "manfred").chmod(0o600)
+            with self.assertRaisesRegex(RuntimeError, "launcher is not executable"):
+                installer.check(args)
+
     def test_symlinked_runtime_ancestor_fails_before_copy(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
