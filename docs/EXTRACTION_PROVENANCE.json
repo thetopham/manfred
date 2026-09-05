@@ -1,0 +1,574 @@
+{
+  "schema": 1,
+  "source_repository": "https://github.com/thetopham/brain",
+  "source_commit": "595671676933d13a3065f88e1f3e25b858ace556",
+  "source_parent": "https://github.com/thetopham/demerzel-idle-compute",
+  "historical_evidence": "docs/historical/ is preserved prior evidence, not validation of this extraction",
+  "files": [
+    {
+      "source_path": ".gitattributes",
+      "destination_path": ".gitattributes",
+      "source_sha256": "e992fbd7918cf68ffe5eda9174b6ee86adeae6a99a4e0802c9ace6f16de39566",
+      "extracted_sha256": "e992fbd7918cf68ffe5eda9174b6ee86adeae6a99a4e0802c9ace6f16de39566",
+      "modified_for_extraction": false,
+      "retain_in_brain": true
+    },
+    {
+      "source_path": ".gitignore",
+      "destination_path": ".gitignore",
+      "source_sha256": "1c05336ce18a9fa16d85fccb1e715b333c43cebbce0979844dfbc9964e6dc3fe",
+      "extracted_sha256": "1c05336ce18a9fa16d85fccb1e715b333c43cebbce0979844dfbc9964e6dc3fe",
+      "modified_for_extraction": false,
+      "retain_in_brain": true
+    },
+    {
+      "source_path": "apps/manfred-companion/README.md",
+      "destination_path": "apps/manfred-companion/README.md",
+      "source_sha256": "8fbf3eb32de696d434a6d53c3475ed599d9356d69884b7a8174ba9321f8197cb",
+      "extracted_sha256": "15e53d17fdce849ed4d945c8afbe6c63e3eec6d752a4eb927c5afa0b35496ce3",
+      "modified_for_extraction": true,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/analysis_options.yaml",
+      "destination_path": "apps/manfred-companion/analysis_options.yaml",
+      "source_sha256": "ac8f659056e551f37e1f6947e1987f1b66a5087bc1110b24aea49efd76b6fe5f",
+      "extracted_sha256": "ac8f659056e551f37e1f6947e1987f1b66a5087bc1110b24aea49efd76b6fe5f",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/lib/main.dart",
+      "destination_path": "apps/manfred-companion/lib/main.dart",
+      "source_sha256": "425b0c29331e687f0b93e86afafcbf7729f1a793ab448847c00431b3cdbdb4b9",
+      "extracted_sha256": "425b0c29331e687f0b93e86afafcbf7729f1a793ab448847c00431b3cdbdb4b9",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/lib/src/audio_pipeline.dart",
+      "destination_path": "apps/manfred-companion/lib/src/audio_pipeline.dart",
+      "source_sha256": "5ef34860390a8308fe6c71d5cdba318aaac95cfe08604b00041eb06745f056cf",
+      "extracted_sha256": "5ef34860390a8308fe6c71d5cdba318aaac95cfe08604b00041eb06745f056cf",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/lib/src/bridge_controller.dart",
+      "destination_path": "apps/manfred-companion/lib/src/bridge_controller.dart",
+      "source_sha256": "28fa24f258e7ae21ee4bcbf718988172a188fb409f5a3a5485b70ca1cc0500b0",
+      "extracted_sha256": "28fa24f258e7ae21ee4bcbf718988172a188fb409f5a3a5485b70ca1cc0500b0",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/lib/src/chunk_spool.dart",
+      "destination_path": "apps/manfred-companion/lib/src/chunk_spool.dart",
+      "source_sha256": "156e03906b5f565aa0fb58da0f258dc4298bc9d2bc3c463d4d52cefc69fc339e",
+      "extracted_sha256": "156e03906b5f565aa0fb58da0f258dc4298bc9d2bc3c463d4d52cefc69fc339e",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/lib/src/config_store.dart",
+      "destination_path": "apps/manfred-companion/lib/src/config_store.dart",
+      "source_sha256": "cb515318c2fe05d2b06029e8276ca754e3448271b82f9eb47805245e95271c8f",
+      "extracted_sha256": "cb515318c2fe05d2b06029e8276ca754e3448271b82f9eb47805245e95271c8f",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/lib/src/foreground_service.dart",
+      "destination_path": "apps/manfred-companion/lib/src/foreground_service.dart",
+      "source_sha256": "8e486e0656e7882d58bad5a6c5b6944970c07980bce1771c12b81cc330948692",
+      "extracted_sha256": "8e486e0656e7882d58bad5a6c5b6944970c07980bce1771c12b81cc330948692",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/lib/src/generation_packet_serial.dart",
+      "destination_path": "apps/manfred-companion/lib/src/generation_packet_serial.dart",
+      "source_sha256": "820d096a5fd5dd147b1319a7dd0b3f751c656ab421f0ce361725da4693deb33a",
+      "extracted_sha256": "820d096a5fd5dd147b1319a7dd0b3f751c656ab421f0ce361725da4693deb33a",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/lib/src/lifecycle_coordination.dart",
+      "destination_path": "apps/manfred-companion/lib/src/lifecycle_coordination.dart",
+      "source_sha256": "5d68666fcced910a48f40bbb79774216f9140ed6a053fcd4fc269d6fa93ffa40",
+      "extracted_sha256": "5d68666fcced910a48f40bbb79774216f9140ed6a053fcd4fc269d6fa93ffa40",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/lib/src/manfred_uploader.dart",
+      "destination_path": "apps/manfred-companion/lib/src/manfred_uploader.dart",
+      "source_sha256": "ae6fefecfae45795b6e23c9a7c2e9bd47ab32917e3b7e1f750979c8bce6b7f28",
+      "extracted_sha256": "ae6fefecfae45795b6e23c9a7c2e9bd47ab32917e3b7e1f750979c8bce6b7f28",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/lib/src/omi_ble_transport.dart",
+      "destination_path": "apps/manfred-companion/lib/src/omi_ble_transport.dart",
+      "source_sha256": "90ad147fd540cfcc767ea0433e477d055ac8e531b5599b86c2ba1824cf666bae",
+      "extracted_sha256": "90ad147fd540cfcc767ea0433e477d055ac8e531b5599b86c2ba1824cf666bae",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/lib/src/omi_protocol.dart",
+      "destination_path": "apps/manfred-companion/lib/src/omi_protocol.dart",
+      "source_sha256": "4f23211e2fa6d50f30d104556aa2399e13b3dc2af204c9622010037f54d25989",
+      "extracted_sha256": "4f23211e2fa6d50f30d104556aa2399e13b3dc2af204c9622010037f54d25989",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/lib/src/opus_decoder.dart",
+      "destination_path": "apps/manfred-companion/lib/src/opus_decoder.dart",
+      "source_sha256": "28ed54c46ba0402372e80c2c6079c70e4b1c60d3823f889e7a47c25b69990432",
+      "extracted_sha256": "28ed54c46ba0402372e80c2c6079c70e4b1c60d3823f889e7a47c25b69990432",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/lib/src/validation_evidence.dart",
+      "destination_path": "apps/manfred-companion/lib/src/validation_evidence.dart",
+      "source_sha256": "21a8940e4851815e97a9ef570513616eb43525c98ded5d052160f05a0990f03b",
+      "extracted_sha256": "21a8940e4851815e97a9ef570513616eb43525c98ded5d052160f05a0990f03b",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/platform/android/AndroidManifest.xml",
+      "destination_path": "apps/manfred-companion/platform/android/AndroidManifest.xml",
+      "source_sha256": "585f558b05f3c80d7f8400410d4255dd5b9aeb94e41c4e7e94922d58bfeb9cdb",
+      "extracted_sha256": "585f558b05f3c80d7f8400410d4255dd5b9aeb94e41c4e7e94922d58bfeb9cdb",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/platform/android/network_security_config.xml",
+      "destination_path": "apps/manfred-companion/platform/android/network_security_config.xml",
+      "source_sha256": "85b087a174dc18b314e1f6f7e25202ce958fa6b734b99d065a6ae900e09359dc",
+      "extracted_sha256": "85b087a174dc18b314e1f6f7e25202ce958fa6b734b99d065a6ae900e09359dc",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/pubspec.yaml",
+      "destination_path": "apps/manfred-companion/pubspec.yaml",
+      "source_sha256": "7912f5e2fb1c09806b5c451dc1c0cf4cae4c1be067a0a8cbfcf63bc128f8575b",
+      "extracted_sha256": "7912f5e2fb1c09806b5c451dc1c0cf4cae4c1be067a0a8cbfcf63bc128f8575b",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/test/audio_pipeline_test.dart",
+      "destination_path": "apps/manfred-companion/test/audio_pipeline_test.dart",
+      "source_sha256": "7fbd681b59ba858cb856197c02d1c120a0e076c421d5d9afa09229b3daf7193c",
+      "extracted_sha256": "7fbd681b59ba858cb856197c02d1c120a0e076c421d5d9afa09229b3daf7193c",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/test/ble_setup_test.dart",
+      "destination_path": "apps/manfred-companion/test/ble_setup_test.dart",
+      "source_sha256": "6f8961fe02f27a09f4bbdc7d15e2b963d1462741053e33c5017eede000b6ca43",
+      "extracted_sha256": "6f8961fe02f27a09f4bbdc7d15e2b963d1462741053e33c5017eede000b6ca43",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/test/capture_counters_test.dart",
+      "destination_path": "apps/manfred-companion/test/capture_counters_test.dart",
+      "source_sha256": "5e824db5027db7db11f1c2930bebd652f683db06de9a3dbbd31287539cbd2731",
+      "extracted_sha256": "5e824db5027db7db11f1c2930bebd652f683db06de9a3dbbd31287539cbd2731",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/test/config_store_test.dart",
+      "destination_path": "apps/manfred-companion/test/config_store_test.dart",
+      "source_sha256": "9a7244d9b87ffe71b8e5e78fd3ed79b79884171866d1662732a7691ac7c6d3bf",
+      "extracted_sha256": "9a7244d9b87ffe71b8e5e78fd3ed79b79884171866d1662732a7691ac7c6d3bf",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/test/foreground_service_result_test.dart",
+      "destination_path": "apps/manfred-companion/test/foreground_service_result_test.dart",
+      "source_sha256": "55cd212bf423d3414f1a3b8e6e509fe838efe0c84ae6fc290182eef05ddbbf63",
+      "extracted_sha256": "55cd212bf423d3414f1a3b8e6e509fe838efe0c84ae6fc290182eef05ddbbf63",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/test/generation_packet_serial_test.dart",
+      "destination_path": "apps/manfred-companion/test/generation_packet_serial_test.dart",
+      "source_sha256": "9c9c1cdc8ab46cc07f143a1b9a573ce2b3ed46ba5d3ace861ffe5c37b578accf",
+      "extracted_sha256": "9c9c1cdc8ab46cc07f143a1b9a573ce2b3ed46ba5d3ace861ffe5c37b578accf",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/test/lifecycle_coordination_test.dart",
+      "destination_path": "apps/manfred-companion/test/lifecycle_coordination_test.dart",
+      "source_sha256": "19d224bb40d0693f146454e1a597a24d513a29e44699663c3372c8d76af38aff",
+      "extracted_sha256": "19d224bb40d0693f146454e1a597a24d513a29e44699663c3372c8d76af38aff",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/test/settings_dialog_test.dart",
+      "destination_path": "apps/manfred-companion/test/settings_dialog_test.dart",
+      "source_sha256": "022f6f47f727a06b9a4b90e9b8dee0169b6d590cfabccafeca89e0cd71a2604b",
+      "extracted_sha256": "022f6f47f727a06b9a4b90e9b8dee0169b6d590cfabccafeca89e0cd71a2604b",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/test/spool_uploader_test.dart",
+      "destination_path": "apps/manfred-companion/test/spool_uploader_test.dart",
+      "source_sha256": "83489254385411cf780a8f8f4b3ffdd4ec471015d4ddc0535de30d24a20720bb",
+      "extracted_sha256": "83489254385411cf780a8f8f4b3ffdd4ec471015d4ddc0535de30d24a20720bb",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/test/validation_evidence_test.dart",
+      "destination_path": "apps/manfred-companion/test/validation_evidence_test.dart",
+      "source_sha256": "7fc5b2ff321e2e5a25459ac180bfd8e5bfb4000371ad3d91145746051dd8f843",
+      "extracted_sha256": "7fc5b2ff321e2e5a25459ac180bfd8e5bfb4000371ad3d91145746051dd8f843",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "apps/manfred-companion/tool/materialize_android.sh",
+      "destination_path": "apps/manfred-companion/tool/materialize_android.sh",
+      "source_sha256": "478e6bead8fa34b9ff8fadcdb53c1fd595a50fab991ad24b72e07f650693f2d6",
+      "extracted_sha256": "478e6bead8fa34b9ff8fadcdb53c1fd595a50fab991ad24b72e07f650693f2d6",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/README.md",
+      "destination_path": "docs/ears.md",
+      "source_sha256": "bfa5f729fa96c9bf254abf95c0ad492c256ded546884e3a7a98bf563b77a7663",
+      "extracted_sha256": "230ba411dc9a16855aced9402023d918708f0c165c34c1ba5c336e2c2d565a4a",
+      "modified_for_extraction": true,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/deploy/manfred_wiki_sync.py",
+      "destination_path": "deploy/manfred_wiki_sync.py",
+      "source_sha256": "eba55d268a653701b30d14b090a165a3846deed520dd6eecdb33127707fcbb20",
+      "extracted_sha256": "628b595ee2d7e92f8c17d1ab9b9c6ae81a1a5cfc5be7bbb0f7ba7f915315caae",
+      "modified_for_extraction": true,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/deploy/systemd/manfred-ears-forward.service",
+      "destination_path": "deploy/systemd/manfred-ears-forward.service",
+      "source_sha256": "193b3212bcd031228320185ef00c0822ee78668e7bbbdc44c5158ab7d7752054",
+      "extracted_sha256": "08c72cb48c78960854e8d0a8dccb6a6fb76a3eaf99bd2a7e7170cc368f52e61c",
+      "modified_for_extraction": true,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/deploy/systemd/manfred-ears-forward.socket",
+      "destination_path": "deploy/systemd/manfred-ears-forward.socket",
+      "source_sha256": "1d488e75319ad3e48fa219b3230b5a55d7ac1037e5934a15161286d0fd7d508f",
+      "extracted_sha256": "eba67a2ab750418a622e37c83d7937c13a0881164c123a38dc25969248da6b48",
+      "modified_for_extraction": true,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/deploy/systemd/manfred-ears-operator.service",
+      "destination_path": "deploy/systemd/manfred-ears-operator.service",
+      "source_sha256": "c26d76cf8edda131fa09b77fd623c5b85c017cd7866a5a7acbd4f18d19b163e9",
+      "extracted_sha256": "1f351c6f562630de71261db94d3c25d016dfef3ec65f423a4476b7ff128ce2ad",
+      "modified_for_extraction": true,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/deploy/systemd/manfred-ears-receiver.service",
+      "destination_path": "deploy/systemd/manfred-ears-receiver.service",
+      "source_sha256": "e7c6901a8948b09b9fc638657a6917119ecd03075b0fdb730dd1556640222ca3",
+      "extracted_sha256": "4b881ac9a79496c2664092e4fcee5631a722ecdb265e1952ca99b9567e570c4e",
+      "modified_for_extraction": true,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/deploy/systemd/manfred-ears-wiki-sync.service",
+      "destination_path": "deploy/systemd/manfred-ears-wiki-sync.service",
+      "source_sha256": "883eb98bf8d8eacd6894230de1b8961368b99c9ad09c2a75fe0fb7d46eb087bb",
+      "extracted_sha256": "eab64e3d2efde2f05019a1ef6c78051556589f1ad2c07634696103283a246328",
+      "modified_for_extraction": true,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/deploy/systemd/manfred-ears-wiki-sync.timer",
+      "destination_path": "deploy/systemd/manfred-ears-wiki-sync.timer",
+      "source_sha256": "64a7c1229c80bfda9243e7ebacff95a82b32dc56a1d1dc4ea6da6bf38dace71c",
+      "extracted_sha256": "64a7c1229c80bfda9243e7ebacff95a82b32dc56a1d1dc4ea6da6bf38dace71c",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/deploy/systemd/manfred-ears.env.example",
+      "destination_path": "deploy/systemd/manfred-ears.env.example",
+      "source_sha256": "d6e8d11cdbb442023938b3a291e7aab8cec633bc22fcb6543cf8e6feca3c784d",
+      "extracted_sha256": "d0721251f807a0bf4ac8e9d3448536f5462856a1f6dbefffa8a0e1edf3896a32",
+      "modified_for_extraction": true,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/deploy/systemd/manfred-vision-receiver.service",
+      "destination_path": "deploy/systemd/manfred-vision-receiver.service",
+      "source_sha256": "5d5d32e864732cccd0a999b1015bb7519d8ab0e7afefbfe0775af4ddba2ad129",
+      "extracted_sha256": "081a8a05d28095c76e13146592a4ff8b9fc2d7422b33fae586a0bf8f7c973db1",
+      "modified_for_extraction": true,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/manfred_ears/__init__.py",
+      "destination_path": "manfred_ears/__init__.py",
+      "source_sha256": "f41ab10f6b5c2ccf6d919fbca7a764e54c89c3d896941415da4641b151ffbf47",
+      "extracted_sha256": "f41ab10f6b5c2ccf6d919fbca7a764e54c89c3d896941415da4641b151ffbf47",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/manfred_ears/__main__.py",
+      "destination_path": "manfred_ears/__main__.py",
+      "source_sha256": "935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d",
+      "extracted_sha256": "935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/manfred_ears/archive.py",
+      "destination_path": "manfred_ears/archive.py",
+      "source_sha256": "42e13d5954843652de0585ffc8270e11fa3aca50d9bd5314004eba7173ca85ca",
+      "extracted_sha256": "42e13d5954843652de0585ffc8270e11fa3aca50d9bd5314004eba7173ca85ca",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/manfred_ears/asr.py",
+      "destination_path": "manfred_ears/asr.py",
+      "source_sha256": "91d22526776193d9181e0ddb2712acd984993a28aefdc5532529a8abf874d5be",
+      "extracted_sha256": "91d22526776193d9181e0ddb2712acd984993a28aefdc5532529a8abf874d5be",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/manfred_ears/cli.py",
+      "destination_path": "manfred_ears/cli.py",
+      "source_sha256": "bab75447db4d69d891549c141cb32ddc4d2f1574daa697a025b5fe1e8b0974f7",
+      "extracted_sha256": "bab75447db4d69d891549c141cb32ddc4d2f1574daa697a025b5fe1e8b0974f7",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/manfred_ears/config.py",
+      "destination_path": "manfred_ears/config.py",
+      "source_sha256": "f994f9652d6b5d238125914b151ea543f1a8de56c68ffc178b2640f5c1a22634",
+      "extracted_sha256": "f994f9652d6b5d238125914b151ea543f1a8de56c68ffc178b2640f5c1a22634",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/manfred_ears/episodes.py",
+      "destination_path": "manfred_ears/episodes.py",
+      "source_sha256": "d7b46e1fd488eb329dec318ec16c40a32fd77c9d2ca4f0ee6688194249e817e7",
+      "extracted_sha256": "d7b46e1fd488eb329dec318ec16c40a32fd77c9d2ca4f0ee6688194249e817e7",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/manfred_ears/metrics.py",
+      "destination_path": "manfred_ears/metrics.py",
+      "source_sha256": "71d8de77d5130cec2804b4933e4ee95da73100a41d8e307ba1a4ac9a92c1b306",
+      "extracted_sha256": "71d8de77d5130cec2804b4933e4ee95da73100a41d8e307ba1a4ac9a92c1b306",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/manfred_ears/service.py",
+      "destination_path": "manfred_ears/service.py",
+      "source_sha256": "1c0a1a7a7f9ce41a74d35b3606a22b65e872b0d29be961e8acaf71bfe9d49bba",
+      "extracted_sha256": "1c0a1a7a7f9ce41a74d35b3606a22b65e872b0d29be961e8acaf71bfe9d49bba",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/manfred_ears/vad.py",
+      "destination_path": "manfred_ears/vad.py",
+      "source_sha256": "532cfce75d106afb4e8a86bdd522f8e33e41a7126d1f0d9cb9aaba7356033a81",
+      "extracted_sha256": "532cfce75d106afb4e8a86bdd522f8e33e41a7126d1f0d9cb9aaba7356033a81",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/manfred_ears/vision.py",
+      "destination_path": "manfred_ears/vision.py",
+      "source_sha256": "ea1d64122520c8de157f4309a5e36699fb6a8ff07647bb894d5da7a251dba9fb",
+      "extracted_sha256": "ea1d64122520c8de157f4309a5e36699fb6a8ff07647bb894d5da7a251dba9fb",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/requirements-parakeet.txt",
+      "destination_path": "requirements-parakeet.txt",
+      "source_sha256": "6ca4c8e6d2934aac32125e432ca40ac99e01e891e07916442c4332bf2ef28ccd",
+      "extracted_sha256": "6ca4c8e6d2934aac32125e432ca40ac99e01e891e07916442c4332bf2ef28ccd",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/requirements-test.txt",
+      "destination_path": "requirements-test.txt",
+      "source_sha256": "f59f0cb7b87c3045f1eaf937c276a2fe877170141b2c48a4035db5e1d761ab6b",
+      "extracted_sha256": "f59f0cb7b87c3045f1eaf937c276a2fe877170141b2c48a4035db5e1d761ab6b",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/requirements.txt",
+      "destination_path": "requirements.txt",
+      "source_sha256": "82361d80f8f2aa905833bd6764b495b2cf60f396bdf75ac8f516862c61bc6484",
+      "extracted_sha256": "82361d80f8f2aa905833bd6764b495b2cf60f396bdf75ac8f516862c61bc6484",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/tests/test_archive.py",
+      "destination_path": "tests/test_archive.py",
+      "source_sha256": "55a71c4e92c4511ee7231d44f7c9a51979764b97f9a4a18e222965176ec9eca0",
+      "extracted_sha256": "55a71c4e92c4511ee7231d44f7c9a51979764b97f9a4a18e222965176ec9eca0",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/tests/test_asr.py",
+      "destination_path": "tests/test_asr.py",
+      "source_sha256": "76bf91055cbfaecc1ab061cbea75aa4bd98129d3fd0cbbaafec2de76a57a360e",
+      "extracted_sha256": "76bf91055cbfaecc1ab061cbea75aa4bd98129d3fd0cbbaafec2de76a57a360e",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/tests/test_config.py",
+      "destination_path": "tests/test_config.py",
+      "source_sha256": "5250fc72d5743e566bc7fb53e8b5f52d521e5285da71215cc35fb4eda1247f5d",
+      "extracted_sha256": "5250fc72d5743e566bc7fb53e8b5f52d521e5285da71215cc35fb4eda1247f5d",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/tests/test_episodes.py",
+      "destination_path": "tests/test_episodes.py",
+      "source_sha256": "caa9497755f91290ef62d03bdf1dfdccdad7b68754679fe015e10b26c9bdeeb7",
+      "extracted_sha256": "caa9497755f91290ef62d03bdf1dfdccdad7b68754679fe015e10b26c9bdeeb7",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/tests/test_rolling.py",
+      "destination_path": "tests/test_rolling.py",
+      "source_sha256": "1bbb8daf7be615f57a3ea2e68f9bec5b41b9851ff811e13151af996b014d8c8a",
+      "extracted_sha256": "1bbb8daf7be615f57a3ea2e68f9bec5b41b9851ff811e13151af996b014d8c8a",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/tests/test_service.py",
+      "destination_path": "tests/test_service.py",
+      "source_sha256": "e4b91dc3570b3fd72a7fb4f8d95cff86d4aaf6dda1fe7d3b0a618587845cdf6a",
+      "extracted_sha256": "e4b91dc3570b3fd72a7fb4f8d95cff86d4aaf6dda1fe7d3b0a618587845cdf6a",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/tests/test_systemd_brain_paths.py",
+      "destination_path": "tests/test_systemd_paths.py",
+      "source_sha256": "657be0db8e94d223f2b51c4391055c2a56f9074d5b60636085325791c563c227",
+      "extracted_sha256": "b49396528424b8c9dfd74ff90e15efdfcc32501dbfa6fa07f66bc0bd91321b2a",
+      "modified_for_extraction": true,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/tests/test_vad.py",
+      "destination_path": "tests/test_vad.py",
+      "source_sha256": "971d5e43ab33767597abef1d54a6f4e6d030786c253ed51aaef444bc911e40eb",
+      "extracted_sha256": "971d5e43ab33767597abef1d54a6f4e6d030786c253ed51aaef444bc911e40eb",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/tests/test_vision.py",
+      "destination_path": "tests/test_vision.py",
+      "source_sha256": "12cd0b8250b4252b58111a20afeb7d1bb80b788a6272a7a310e9086011a2568e",
+      "extracted_sha256": "12cd0b8250b4252b58111a20afeb7d1bb80b788a6272a7a310e9086011a2568e",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/tests/test_wiki_sync.py",
+      "destination_path": "tests/test_wiki_sync.py",
+      "source_sha256": "85e6b0670c0635347e31eaba32904493f8c55f7888f3355650b78e746487b372",
+      "extracted_sha256": "caa8f488effdf3910a35d38c77942044670fb5dd9b2cb57e47fb9c5be102b09a",
+      "modified_for_extraction": true,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "ingestion/manfred-ears/validation/last-result.json",
+      "destination_path": "docs/historical/ears-validation-last-result.json",
+      "source_sha256": "794dfc8729c56fd5155d460df8222613ebc63a7b0ec82fd30d6639dee0dad4d5",
+      "extracted_sha256": "794dfc8729c56fd5155d460df8222613ebc63a7b0ec82fd30d6639dee0dad4d5",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "scripts/validate_android_local.py",
+      "destination_path": "scripts/validate_android_local.py",
+      "source_sha256": "bc44e1cdc2fba011b8c8a8a8d5960bb2a38d64a03222731d34f89f637ed3c621",
+      "extracted_sha256": "bc44e1cdc2fba011b8c8a8a8d5960bb2a38d64a03222731d34f89f637ed3c621",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    },
+    {
+      "source_path": "tests/test_android_validation.py",
+      "destination_path": "tests/test_android_validation.py",
+      "source_sha256": "93ba1c193cd833cfa62cac9ce4c568ad1fd17d67ad58aa1a3b6a722f3a18e61b",
+      "extracted_sha256": "93ba1c193cd833cfa62cac9ce4c568ad1fd17d67ad58aa1a3b6a722f3a18e61b",
+      "modified_for_extraction": false,
+      "retain_in_brain": false
+    }
+  ],
+  "summary": {
+    "source_paths_accounted_for": 68,
+    "owned_paths_relocated": 66,
+    "shared_files_retained_in_brain": 2,
+    "byte_identical_files": 56,
+    "files_adapted_for_extraction": 12
+  },
+  "generated_files": [
+    "README.md",
+    "SECURITY.md",
+    "LICENSE_PROVENANCE.md",
+    "pyproject.toml",
+    "requirements-validate.txt",
+    "scripts/install_runtime.py",
+    "scripts/validate_local.py",
+    "tests/test_runtime_install.py",
+    "docs/brain-export-contract.md",
+    "docs/historical/README.md",
+    "docs/extraction-validation.txt",
+    "docs/independent-validation.txt"
+  ]
+}

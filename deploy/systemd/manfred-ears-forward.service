@@ -1,0 +1,16 @@
+[Unit]
+Description=Manfred Ears TCP forwarder to 7090
+Documentation=file://@MANFRED_RUNTIME_ROOT@/docs/ears.md
+Requires=manfred-ears-forward.socket
+After=network-online.target manfred-ears-forward.socket
+
+[Service]
+Type=notify
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd @MANFRED_FORWARD_TARGET@
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+TasksMax=64

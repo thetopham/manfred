@@ -1,0 +1,4 @@
+# Install PyTorch/torchaudio for the host CUDA runtime first.
+# Keep this separate from the receiver's small base environment.
+nemo_toolkit[asr]==2.7.3
+soundfile>=0.12,<1

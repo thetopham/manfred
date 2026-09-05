@@ -1,0 +1,11 @@
+[Unit]
+Description=Forward the legacy Demerzel Manfred Ears endpoint to 7090
+Documentation=file://@MANFRED_RUNTIME_ROOT@/docs/ears.md
+
+[Socket]
+ListenStream=@MANFRED_FORWARD_LISTEN@
+FreeBind=true
+NoDelay=true
+
+[Install]
+WantedBy=sockets.target

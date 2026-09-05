@@ -1,0 +1,39 @@
+# Runtime and secrets
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+*.wal
+*.shm
+*.lock
+
+# Generated/model artifacts
+*.gguf
+*.safetensors
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+node_modules/
+build/
+dist/
+.pytest_cache/
+.coverage
+
+# Native evidence and local spools
+spool/
+cache/
+logs/
+
+# Editor/OS
+.DS_Store
+*.swp
+*~
