@@ -137,6 +137,8 @@ def check(args: argparse.Namespace) -> None:
     binary = safe_path(args.bin_dir) / "manfred"
     if binary.is_symlink() or not binary.is_file() or binary.read_bytes() != launcher(args):
         raise RuntimeError("installed Manfred launcher differs")
+    if not os.access(binary, os.X_OK):
+        raise RuntimeError("installed Manfred launcher is not executable")
     for name in ROLE_UNITS[args.role]:
         target = safe_path(args.user_unit_dir) / name
         if target.is_symlink() or not target.is_file() or target.read_bytes() != render_unit(name, args):
