@@ -1,6 +1,6 @@
 # EyeVue E09-family hardware profile: tested TK8 / 0201
 
-Engineering evidence recorded **2026-09-05**. This profile supports Manfred Companion's photo path; it is not a manufacturer specification sheet. Software reference: Manfred commit `84bf29f944374a81b715d671bc1cb18bcad60483` (integrated capture-and-fetch and read-only firmware support), with Capture and fetch selected by default in 0.5.1+9. The installed 0.5.1 build has now read the firmware versions below; full capture-and-fetch hardware acceptance remains in progress. See the [photo workflow and acceptance guide](../eyevue-photos.md).
+Engineering evidence recorded **2026-09-05**. This profile supports Manfred Companion's photo path; it is not a manufacturer specification sheet. Software reference: Manfred commit `84bf29f944374a81b715d671bc1cb18bcad60483` (integrated capture-and-fetch and read-only firmware support), with Capture and fetch selected by default in 0.5.1+9. The installed 0.5.2 build has reconfirmed the firmware versions below; full capture-and-fetch hardware acceptance remains in progress. See the [photo workflow and acceptance guide](../eyevue-photos.md).
 
 ## Identity and measured capabilities
 
@@ -12,7 +12,7 @@ Engineering evidence recorded **2026-09-05**. This profile supports Manfred Comp
 | Wi-Fi original | A downloaded JPEG independently decoded at **3200 x 2400** (7.68 million output pixels). This does not prove the sensor model or whether firmware interpolates the image. |
 | JPEG framing | The verified original ended with JPEG EOI plus three zero alignment bytes. Manfred preserves the bytes and permits up to three zero bytes after EOI while checking completed HTTP transfer and successful Android decoding. |
 | Live video | Vendor software exposes an H.264 RTSP endpoint. Our test reached RTSP but did not decode video; resolution and frame rate remain unknown. |
-| Installed firmware | The supervised Manfred **0.5.1** read on **2026-09-05** displayed **BT 1.1.9**, **ISP 3.3.7**, and **device revision 2**, alongside TK8/0201. These are device-reported values, separate from catalog versions. |
+| Installed firmware | The supervised Manfred **0.5.2** read on **2026-09-05** reconfirmed **BT 1.1.9**, **ISP 3.3.7**, and **device revision 2**, alongside TK8/0201. These are device-reported values, separate from catalog versions. |
 | Unestablished hardware | Exact Bluetooth/audio chip, camera/ISP SoC, sensor part number, optics/FOV, native megapixels, RAM, flash/storage capacity, battery capacity, Wi-Fi chipset/band, and board revision. No values should be inferred from the E09 name or an unrelated listing. |
 | Companion test target | **Samsung Galaxy S25+ SM-S936U**, Android 16 / **SDK 36**. Samsung identifies SM-S936U as S25+; SDK level was observed on the test phone. |
 
@@ -50,6 +50,16 @@ Sources: vendor `view/home/HomeFragment.java:202-217`, `bluetooth/beans/SyncValu
 
 The earlier CyanBridge live attempt reached the RTSP server, then Media3 rejected the SDP attribute `a=decode_buf=300`. This is an Android player/parser compatibility failure, not evidence that the stream is absent. The vendor's LibVLC path is a useful implementation reference. A stream-frame fallback would need separate decoding, resolution, latency, and network-routing measurements; it must not be described as a 3200 x 2400 still-photo path. See [Media3 RTSP documentation](https://developer.android.com/media/media3/exoplayer/rtsp) and its [SDP parser source](https://github.com/androidx/media/blob/release/libraries/exoplayer_rtsp/src/main/java/androidx/media3/exoplayer/rtsp/SessionDescriptionParser.java).
 
+## Comparison with VisionClaw and Meta's stream API
+
+[VisionClaw Android at commit `11ad0957520a2653d3322db5210f3d99b9522430`](https://github.com/Intent-Lab/VisionClaw/blob/11ad0957520a2653d3322db5210f3d99b9522430/samples/CameraAccessAndroid/app/src/main/java/com/meta/wearable/dat/externalsampleapps/cameraaccess/livekit/LiveKitSessionViewModel.kt#L654) requests a Meta DAT stream at **MEDIUM, 24 fps**, then forwards received I420 frames into a LiveKit video track. These are requested settings, not an independently measured delivery rate. Its current Android voice/vision path is DAT to LiveKit; the README's older direct-Gemini, approximately-one-JPEG-per-second description does not describe this implementation.
+
+The [freeze action](https://github.com/Intent-Lab/VisionClaw/blob/11ad0957520a2653d3322db5210f3d99b9522430/samples/CameraAccessAndroid/app/src/main/java/com/meta/wearable/dat/externalsampleapps/cameraaccess/livekit/LiveKitSessionViewModel.kt#L732) retains a grabbed stream frame and mutes the camera publication while the voice session continues. Its [agent attachment helper](https://github.com/Intent-Lab/VisionClaw/blob/11ad0957520a2653d3322db5210f3d99b9522430/agent/main.py#L107) JPEG-encodes the latest video frame, fitting it within 1280 x 1280. This is a stream-frame path, not retrieval of a saved full-resolution glasses JPEG, and it does not attach an image to an already-open ChatGPT app conversation.
+
+Meta's [official Android camera documentation](https://github.com/facebook/meta-wearables-dat-android/blob/main/plugins/mwdat-android/skills/camera-streaming/SKILL.md#resolution-options), checked 2026-09-05, lists **HIGH 720 x 1280**, **MEDIUM 504 x 896**, and **LOW 360 x 640**. It describes a resolution/frame-rate tradeoff over Bluetooth, with lower settings often improving each frame's visual quality. This does not establish Android DAT Wi-Fi support.
+
+For EyeVue, the measured **3200 x 2400 Wi-Fi original** alongside the **320 x 180 BLE image** does not establish a 320 x 180 camera-sensor ceiling. The concrete integration gap is the absence of a documented, verified TK8 streaming API equivalent to DAT in the reviewed material. EyeVue's RTSP endpoint could provide a stream-frame source for an app-owned voice session, but decoding, resolution, latency, and concurrent operation remain unverified. Neither an absolute hardware inability nor a working RTSP replacement has been established.
+
 ## 0.5.1 capture-and-fetch attempt at low battery
 
 The supervised **0.5.1** attempt joined the glasses AP, read the initial album baseline, finished transfer mode, and reached camera Ready. The user's first **Take photo** attempt then produced an apparent error sound, as reported by the user. It timed out after **15 seconds** without a `0x22` shutter acknowledgement, photo-busy/count event, or saved image. The sound has not been decoded as a specific firmware rejection reason.
@@ -60,9 +70,15 @@ The vendor app explicitly refuses **Wi-Fi import below 20%** (`view/photo/PhotoL
 
 Low power is therefore a plausible, **unproven** explanation for this attempt. Charge above the vendor's 20% import/live threshold, verify the reported level, and repeat the capture-and-fetch test before attributing failure to firmware AP/camera concurrency. This attempt does not prove that concurrency is the cause.
 
+## 0.5.2 charged retest: capture accepted, retrieval pending
+
+On **2026-09-05 at 15:41:43 local time**, the installed **0.5.2** build's read-only battery query received command `0x17` with payload `34 30 01`: **40%, charging**. Unlike the `0x53` push encoding above, this response uses the low nibbles of its first two bytes as decimal digits and byte 2 as the charging flag. The same build reconfirmed **BT 1.1.9 / ISP 3.3.7 / device 2**, with profile TK8/0201.
+
+After unplugging, the reported level was **41%** and the initial album baseline reached Ready. At **15:45:49.997**, the shutter was accepted with `0x22 [01]` and photo-busy state 1. At **15:45:52.542**, the count advanced **29 to 30** and the camera returned idle, about **2.5 seconds** later. Manfred requested the AP rejoin automatically at **15:45:52.545**. This establishes an accepted offline capture in the charged retest; retrieval and a completed saved image remain pending in this record.
+
 ## Firmware identification and update architecture
 
-The vendor's read-only device-info request is **command `0x55`, payload `00`**, encoded as `AB 55 00 03 55 00 55`. Manfred's integrated connection flow uses `buildGetDeviceInfoPacket()` for an optional query with a three-second response limit, alongside the separate customer/profile lookup. The installed 0.5.1 build displayed a valid device response: **BT 1.1.9, ISP 3.3.7, device 2**. This was confirmed in the supervised device UI; a retained raw 0x55 diagnostic record is still pending.
+The vendor's read-only device-info request is **command `0x55`, payload `00`**, encoded as `AB 55 00 03 55 00 55`. Manfred's integrated connection flow uses `buildGetDeviceInfoPacket()` for an optional query with a three-second response limit, alongside the separate customer/profile lookup. The installed 0.5.2 build reconfirmed the earlier valid device response: **BT 1.1.9, ISP 3.3.7, device 2**. This was confirmed in the supervised device UI; a retained raw 0x55 diagnostic record is still pending.
 
 For a `0x55` response with at least seven payload bytes, the vendor schema is:
 
@@ -106,7 +122,7 @@ After the real device read, a separate [official request with `deviceVersion=1.1
 
 1. Preserve the verified BT 1.1.9 / ISP 3.3.7 / device 2 values and add the read-only 0x55 diagnostic record; retain TK8/0201 as separate profile fields.
 2. Give the vendor those versions and the current-version catalog result, then ask whether this firmware supports a JPEG shutter during media AP or live AP. No applicable update or capture-mode fix was offered by this lookup.
-3. Repeat the installed 0.5.1 Capture and fetch test after charging above 20% and verifying the reported level: baseline the album, close AP, wait for camera idle and a fresh count, capture offline, then reconnect to fetch new originals. The low-battery attempt timed out; the complete hardware cycle is not yet verified.
+3. Complete the installed 0.5.2 Capture and fetch retest: charged, unplugged offline capture now produced a fresh count and automatic AP rejoin request. Verify retrieval, decoded dimensions, and the committed saved image before accepting the complete cycle; repeatability remains untested.
 4. Keep persistent AP capture and RTSP frame extraction experimental until each has measured image dimensions and repeatable delivery.
 
 ## Reproducible source references
