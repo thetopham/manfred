@@ -208,7 +208,7 @@ class EyevueController extends ChangeNotifier {
         await _refreshState();
       });
 
-  Future<void> startSession({String startup = 'media'}) => _run(() async {
+  Future<void> startSession({String startup = 'capture'}) => _run(() async {
         if (!connected || sessionActive || _foregroundHeld) {
           throw StateError('Connect EyeVue and stop the previous photo session first.');
         }

@@ -128,7 +128,7 @@ class EyevuePlugin(
                 "stopScan" -> stopScan()
                 "connect" -> connect(call.argument<String>("address") ?: "")
                 "disconnect" -> disconnect()
-                "startSession" -> startSession(call.argument<String>("startup") ?: "media")
+                "startSession" -> startSession(call.argument<String>("startup") ?: "capture")
                 "stopSession" -> stopSession()
                 "capture" -> capture()
                 else -> {

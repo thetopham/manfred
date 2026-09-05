@@ -14,7 +14,7 @@ class EyevuePanel extends StatefulWidget {
 }
 
 class _EyevuePanelState extends State<EyevuePanel> {
-  String _startup = 'media';
+  String _startup = 'capture';
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -122,7 +122,7 @@ class _EyevuePanelState extends State<EyevuePanel> {
                     value: _startup,
                     isExpanded: true,
                     items: const <DropdownMenuItem<String>>[
-                      DropdownMenuItem<String>(value: 'media', child: Text('Photo session')),
+                      DropdownMenuItem<String>(value: 'media', child: Text('Keep Wi-Fi open (experimental)')),
                       DropdownMenuItem<String>(value: 'capture', child: Text('Capture and fetch (experimental'))),
                       DropdownMenuItem<String>(value: 'live', child: Text('Alternate startup (experimental)')),
                     ],

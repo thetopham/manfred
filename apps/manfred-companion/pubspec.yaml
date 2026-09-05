@@ -1,7 +1,7 @@
 name: manfred_companion
 description: Omi audio and EyeVue photo companion for the Galaxy S25.
 publish_to: none
-version: 0.5.0+8
+version: 0.5.1+9
 
 environment:
   sdk: ">=3.12.0 <4.0.0"
