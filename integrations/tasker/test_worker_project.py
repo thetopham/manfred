@@ -144,6 +144,18 @@ vm.runInContext(input.bodies["11"],ctx);
 process.stdout.write(JSON.stringify({claimRun,sendRun,clearedBeforeJava,queue:JSON.parse(values.ManfredEyevueQueue),calls,logs}));
 """, {"library": self.library, "bodies": bodies, "status": status, "voice": voice or {}})
 
+    @staticmethod
+    def confirmed_evidence(**overrides):
+        evidence = {
+            "selectionActionCompleted": True, "sendActionCompleted": True,
+            "submissionObserved": True, "newImageObserved": True,
+            "networkValidated": True, "confirmationEnabled": True,
+            "errorUiObserved": False, "uploadInProgress": False,
+            "focusModeToggleAttempted": False, "focusModeToggleCompleted": False,
+        }
+        evidence.update(overrides)
+        return evidence
+
     def test_ambiguous_java_result_holds_and_only_defers_dispatcher(self):
         result = self.run_stages("ambiguous")
         self.assertEqual(result["claimRun"], "1")
@@ -153,10 +165,27 @@ process.stdout.write(JSON.stringify({claimRun,sendRun,clearedBeforeJava,queue:JS
         self.assertEqual(result["calls"], [["Manfred Photo Dispatch", 4, "", "", "", False, False, "", False]])
 
     def test_only_positive_confirmed_java_result_marks_sent(self):
-        result = self.run_stages("send_confirmed")
+        result = self.run_stages("send_confirmed", self.confirmed_evidence())
         self.assertEqual(result["queue"]["items"][0]["state"], "sent")
         self.assertIsNone(result["queue"]["items"][0]["owner"])
         self.assertEqual(result["logs"][-1]["path"], "Tasker/manfred-worker-dispatch.json")
+
+    def test_generated_worker_holds_status_only_or_incomplete_confirmation(self):
+        for evidence in ({}, self.confirmed_evidence(newImageObserved=False),
+                         self.confirmed_evidence(networkValidated=None)):
+            with self.subTest(evidence=evidence):
+                result = self.run_stages("send_confirmed", evidence)
+                self.assertEqual(result["queue"]["items"][0]["state"], "held")
+                self.assertIsNotNone(result["queue"]["items"][0]["owner"])
+                self.assertEqual(result["calls"], [["Manfred Photo Dispatch", 4, "", "", "", False, False, "", False]])
+
+    def test_generated_worker_holds_old_images_revealed_after_focus_toggle(self):
+        result = self.run_stages("send_confirmed", self.confirmed_evidence(
+            focusModeToggleAttempted=True, focusModeToggleCompleted=True,
+            imagesBeforeSend=[], imagesAfterSend=[{"uniqueId": "old-photo"}]))
+        self.assertEqual(result["queue"]["items"][0]["state"], "held")
+        self.assertIsNotNone(result["queue"]["items"][0]["owner"])
+        self.assertEqual(result["calls"], [["Manfred Photo Dispatch", 4, "", "", "", False, False, "", False]])
 
     def test_generated_reporting_preserves_held_live_voice_and_unknown_values(self):
         for voice in ({"voiceActiveAfter": True, "voiceNeedsResume": False}, {}):
