@@ -31,9 +31,12 @@ class EyevueController extends ChangeNotifier {
   final Set<String> _emittedImageIds = <String>{};
   int _stateRevision = 0;
   int _selectionRevision = 0;
+  int _photoSourceRevision = 0;
   int? _androidSdkInt;
   String? _selectedAddress;
   String? _nativeAddress;
+  String _selectedPhotoSource = 'wifi';
+  String? _nativePhotoSource;
 
   bool connected = false;
   bool connecting = false;
@@ -55,8 +58,14 @@ class EyevueController extends ChangeNotifier {
   bool wifiDiscoveryLocationEnabled = false;
   String? wifiDiscoveryStatus;
   Stream<EyevueImage> get images => _images.stream;
+  String get photoSource => sessionActive && _nativePhotoSource != null
+      ? _nativePhotoSource!
+      : _selectedPhotoSource;
+  bool get usesBlePreview => photoSource == 'ble_preview';
+  bool get canChangePhotoSource => !busy && !sessionActive && !_foregroundHeld && !_starting;
   bool get batteryTooLowForWifi => battery?.tooLowForWifi ?? false;
-  bool get canStart => connected && !connecting && !busy && !sessionActive && !_foregroundHeld && !batteryTooLowForWifi;
+  bool get canStart => connected && !connecting && !busy && !sessionActive && !_foregroundHeld &&
+      (usesBlePreview || !batteryTooLowForWifi);
   bool get canCapture => connected && sessionActive && ready && !busy;
 
   Future<void> initialize() async {
@@ -72,9 +81,17 @@ class EyevueController extends ChangeNotifier {
     );
     try {
       final int selectionRevision = _selectionRevision;
-      final String? savedAddress = await _settings.loadAddress();
+      final int photoSourceRevision = _photoSourceRevision;
+      final List<String?> saved = await Future.wait<String?>(<Future<String?>>[
+        _settings.loadAddress(),
+        _settings.loadPhotoSource(),
+      ]);
+      final String? savedAddress = saved[0];
       if (selectionRevision == _selectionRevision) {
         _selectedAddress = savedAddress?.isNotEmpty == true ? savedAddress : null;
+      }
+      if (photoSourceRevision == _photoSourceRevision) {
+        _selectedPhotoSource = saved[1] == 'ble_preview' ? 'ble_preview' : 'wifi';
       }
       _updateAddress();
       await _refreshState();
@@ -126,6 +143,9 @@ class EyevueController extends ChangeNotifier {
     connected = state['connected'] == true;
     connecting = state['connecting'] == true;
     sessionActive = state['sessionActive'] == true;
+    if (state['captureSource'] == 'ble_preview' || state['captureSource'] == 'wifi') {
+      _nativePhotoSource = state['captureSource']! as String;
+    }
     ready = sessionActive && state['ready'] == true;
     if (state['status'] is String) {
       status = state['status']! as String;
@@ -263,25 +283,39 @@ class EyevueController extends ChangeNotifier {
         await _refreshState();
       });
 
+  Future<void> selectPhotoSource(String source) => _run(() async {
+        if (sessionActive || _foregroundHeld || _starting) {
+          throw StateError('Stop the photo session before changing its source.');
+        }
+        if (source != 'ble_preview' && source != 'wifi') {
+          throw ArgumentError.value(source, 'source');
+        }
+        await _settings.savePhotoSource(source);
+        _photoSourceRevision++;
+        _selectedPhotoSource = source;
+      });
+
   Future<void> disconnect() => _run(() async {
         await _bridge.disconnect();
         await _refreshState();
       });
 
-  Future<void> startSession({String startup = 'capture'}) => _run(() async {
+  Future<void> startSession({String? startup}) => _run(() async {
+        final String selectedStartup = startup ?? (usesBlePreview ? 'ble_preview' : 'capture');
+        final bool usesWifi = selectedStartup != 'ble_preview';
         if (!connected || sessionActive || _foregroundHeld) {
           throw StateError('Connect EyeVue and stop the previous photo session first.');
         }
-        if (batteryTooLowForWifi) {
+        if (usesWifi && batteryTooLowForWifi) {
           throw StateError('Glasses battery is ${battery!.percent}%. Charge to at least 20% before starting Wi-Fi photo transfer.');
         }
-        if (startup != 'media' && startup != 'live' && startup != 'capture') {
-          throw ArgumentError.value(startup, 'startup');
+        if (!<String>{'media', 'live', 'capture', 'ble_preview'}.contains(selectedStartup)) {
+          throw ArgumentError.value(selectedStartup, 'startup');
         }
         _starting = true;
         try {
           await _releasePending;
-          await _permissions.requestSession(_androidSdkInt);
+          await _permissions.requestSession(_androidSdkInt, usesWifi: usesWifi);
           if (_disposed) {
             return;
           }
@@ -291,7 +325,8 @@ class EyevueController extends ChangeNotifier {
             return;
           }
           final int revision = _stateRevision;
-          await _bridge.startSession(startup);
+          _nativePhotoSource = usesWifi ? 'wifi' : 'ble_preview';
+          await _bridge.startSession(selectedStartup);
           // An accepted session remains owned even if the following state query fails.
           if (revision == _stateRevision) {
             sessionActive = true;

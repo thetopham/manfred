@@ -27,6 +27,7 @@ The 320 x 180 observation is not a hardcoded pixel limit in Manfred's BLE assemb
 | BLE service | `0000aa12-0000-1000-8000-00805f9b34fb`; AA13 writes commands, AA14 reports command/status data, AA15 carries the BLE photo path. |
 | Command framing | App requests start `AB 55`; this unit's AA14 replies start `AC 55`. The decoder accepts both supported headers and validates length plus the additive command/payload checksum. The earlier AB55-only decoder missed this unit's replies. |
 | Normal shutter | `0x22`, payload `30`, matching the vendor home-screen shutter. The vendor calls this parameter THUMBNAIL; that name alone does not establish the size of the separately stored original. |
+| BLE preview request | `0x22`, payload `31`, requests a new AI-photo capture whose image arrives on AA15. The legacy HIGH_QUALITY name does not establish full-resolution output; the measured image is 320x180. |
 | Media AP startup | `0x39`, payload `30`, followed by the asynchronous SSID report on `0x25`. |
 | Experimental live AP startup | One `0x67`, payload `30`, then wait for SSID. Do not follow it with a media-start request merely to retrieve SSID: that changes the startup sequence. |
 | File listing | HTTP `GET http://192.168.169.1/app/getfilelist`; JSON `info[].files[]` includes name, size, and `createtimestr`. |
@@ -37,6 +38,18 @@ The 320 x 180 observation is not a hardcoded pixel limit in Manfred's BLE assemb
 These are the **TK8 AP** routes, not the alternate P2P/XML routes for other EyeVue projects. The current implementation uses the selected Android Wi-Fi `Network.socketFactory` and network-specific DNS for EyeVue HTTP only; it does not bind the entire app process. This was motivated by a physical timeout routed through the phone's VPN and the user's subsequent successful sync after disabling Tailscale. Simultaneous VPN/Omi behavior still needs its own acceptance test.
 
 Source: [native protocol](../../apps/manfred-companion/platform/android/kotlin/eyevue/EyevueProtocol.kt), [plugin startup/capture](../../apps/manfred-companion/platform/android/kotlin/eyevue/EyevuePlugin.kt), [photo session](../../apps/manfred-companion/platform/android/kotlin/eyevue/EyevuePhotoSession.kt), and vendor `EyevueTLiveActivity.java:36,207-211,230-246` under the source root below.
+
+## BLE preview versus Wi-Fi original
+
+**Planned Manfred 0.5.4+12** remembers a BLE-preview or Wi-Fi-original source choice. `startup=ble_preview` uses the app's Take preview action and the existing `buildPhotoPacket(highQuality=true)` request, **0x22 [31]**, with a photo-results subscriber armed before the write. It does not open the glasses AP. The new Manfred mode is not yet physically accepted; the evidence below belongs to the earlier CyanBridge implementation.
+
+The clean [CyanBridge repair](https://github.com/thetopham/Alternative-HeyCyan-App-and-SDK/pull/4), tested at source `66584218b3462c80fe42cb5d9cc45213aa6fe1ce`, produced three consecutive decodable **320x180** JPEGs in **3.399 / 3.514 / 3.576 s**. Its [capture method](https://github.com/thetopham/Alternative-HeyCyan-App-and-SDK/blob/66584218b3462c80fe42cb5d9cc45213aa6fe1ce/android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/devices/eyevue/EyevueManager.kt#L139-L151) waits for the already-armed AA15 result. The [calling flow](https://github.com/thetopham/Alternative-HeyCyan-App-and-SDK/blob/66584218b3462c80fe42cb5d9cc45213aa6fe1ce/android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/MainActivity.kt#L4563-L4616) postpones optional microphone/SCO setup until JPEG assembly completes; earlier overlapping setup correlated with missing BLE packets. This is a tested sequencing constraint, not proof of uninterrupted operation alongside an existing Live session.
+
+Manfred already contains that proven AA15 assembler: start/data/end commands **0x97 / 0x98 / 0x99**, a cumulative unsigned 32-bit data offset, exact announced coverage, bounded terminal zero alignment and gap/conflicting-overlap rejection. It does not resize images to 320x180. The observed result therefore describes this firmware path, not a sensor-resolution ceiling.
+
+The physical glasses shutter produced an ordinary stored photo, photo-busy/idle and a fresh media count, but no AA15 JPEG. In the later [probe results](https://github.com/thetopham/Alternative-HeyCyan-App-and-SDK/blob/c6c3ed3d23ed59cfadb69e4ba42149a2f6213f7b/docs/eyevue-ble-resolution-probe.md#L40-L47), both opaque **0x36** values returned no complete image within 120 seconds, before and after a physical stored photo. No verified BLE command retrieves that same stored original.
+
+Accordingly, Manfred's physical-button path remains **Wi-Fi original only**. Issuing 0x22 [31] after that button would be another exposure, and treating every 0x22/status response as a new trigger could react to the app's own capture. BLE mode will not do either. Wi-Fi mode retains its existing capture-completion gate and new-original retrieval. Optional `imageSource` metadata can identify the resulting image while preserving the existing Tasker receipt contract. New Manfred BLE capture latency, image publication, repeat capture and Live coexistence remain acceptance work.
 
 ## Capture while Wi-Fi is active: evidence and limits
 

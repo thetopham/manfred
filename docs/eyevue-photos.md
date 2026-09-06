@@ -6,7 +6,20 @@ The measured captures below used **0.5.2+10**, source [`212f98b`](https://github
 
 Hardware identity, measured resolutions, firmware boundaries, and protocol evidence are recorded in the [EyeVue E09-family / TK8 hardware profile](hardware/eyevue-e09.md).
 
-## First supervised session
+## Planned 0.5.4+12 photo-source choice
+
+The next version adds a remembered choice between **Instant BLE preview** and **Wi-Fi original**. This describes the settled implementation scope; the new Manfred build and its phone acceptance are still pending. The installed-build results below remain those of 0.5.3+11.
+
+| Source | How to trigger it | Evidence and tradeoff |
+| --- | --- | --- |
+| Instant BLE preview | Use **Take preview in the app** during the BLE-preview session. | Requests a new image over Bluetooth without joining the glasses Wi-Fi. Earlier CyanBridge tests decoded **320x180** previews in approximately **3.4–3.6 s**; those are capture/transfer measurements from that app, not a Manfred or complete ChatGPT-delivery guarantee. |
+| Wi-Fi original | Use the app button or the **physical glasses shutter** during the Wi-Fi-original capture session. | Retrieves the stored **3200x2400** original through Wi-Fi. This keeps the existing baseline/new-photo behavior, including the measured intermittent AP discovery failures. |
+
+The physical shutter does not provide the proven BLE-preview stream. BLE mode will not silently take a second picture after a glasses-button event; choose Wi-Fi original when using that button. The source choice remains separate from the Wi-Fi session's experimental startup options.
+
+Both sources keep the existing successful-save/gallery-URI/Tasker-receipt contract, with optional `imageSource` metadata identifying the source. The existing controlled-replay Tasker results remain valid, but a newly captured BLE preview through Manfred and ChatGPT still needs its own test. See [pinned BLE evidence and protocol boundaries](hardware/eyevue-e09.md#ble-preview-versus-wi-fi-original).
+
+## First supervised Wi-Fi-original session
 
 1. Charge the glasses above 30% for the supervised test. The vendor app blocks Wi-Fi import and live preview below 20%; Manfred 0.5.2 follows that startup policy when battery is known. This is not a verified firmware threshold for taking an offline photo. Disconnect EyeVue from CyanBridge so only Manfred owns its BLE connection.
 2. Open Manfred, choose **Find EyeVue**, select the glasses, and **Connect**. Allow nearby-device permissions.

@@ -14,7 +14,7 @@ class EyevuePanel extends StatefulWidget {
 }
 
 class _EyevuePanelState extends State<EyevuePanel> {
-  String _startup = 'capture';
+  String _wifiStartup = 'capture';
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -38,18 +38,45 @@ class _EyevuePanelState extends State<EyevuePanel> {
                 children: <Widget>[
                   Text('EyeVue photos', style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 8),
+                  DropdownButton<String>(
+                    key: const Key('eyevue-photo-source'),
+                    value: state.photoSource,
+                    isExpanded: true,
+                    items: const <DropdownMenuItem<String>>[
+                      DropdownMenuItem<String>(
+                        value: 'ble_preview',
+                        child: Text('Instant BLE preview · 320 × 180', overflow: TextOverflow.ellipsis),
+                      ),
+                      DropdownMenuItem<String>(
+                        value: 'wifi',
+                        child: Text('Wi-Fi original · full resolution', overflow: TextOverflow.ellipsis),
+                      ),
+                    ],
+                    onChanged: state.canChangePhotoSource
+                        ? (String? value) {
+                            if (value != null) state.selectPhotoSource(value);
+                          }
+                        : null,
+                  ),
                   Text(
-                    _startup == 'capture'
-                        ? 'Capture and fetch reconnects glasses Wi-Fi after each new photo. '
-                            'Start a session before taking pictures. Existing photos stay on the glasses. '
-                            'Photos are saved on this phone; ChatGPT attachment is a separate step.'
-                        : 'Experimental: capture while glasses Wi-Fi is active is still being tested. '
-                            'A session watches for new photos; existing photos stay on the glasses. '
-                            'Photos are saved on this phone and are not sent to ChatGPT automatically.',
+                    state.usesBlePreview
+                        ? 'Get a small preview over Bluetooth without changing the phone’s Wi-Fi. '
+                            'Start a session, then use Take preview in this app. '
+                            'For the glasses shutter, choose Wi-Fi before starting the session.'
+                        : 'Fetch full-resolution originals over the glasses’ Wi-Fi. '
+                            'Start a session before using the glasses shutter or Take photo. '
+                            'Wi-Fi connections can take around 30 seconds or fail.',
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Saved images can be sent to your open ChatGPT conversation by the Manfred Tasker automation.',
                   ),
                   const SizedBox(height: 12),
                   Text(state.status),
-                  if (state.ready) const Text('Ready — try the glasses shutter or Take photo.'),
+                  if (state.ready)
+                    Text(state.usesBlePreview
+                        ? 'Ready — tap Take preview.'
+                        : 'Ready — try the glasses shutter or Take photo.'),
                   if (address != null) Text(address, style: Theme.of(context).textTheme.bodySmall),
                   if (state.project != null)
                     Text('Hardware: ${state.project} / ${state.customer ?? "unknown"}'),
@@ -59,7 +86,7 @@ class _EyevuePanelState extends State<EyevuePanel> {
                     Text('Glasses battery: ${battery.percent}%${battery.charging ? " · Charging" : ""}'),
                   if (state.connected && battery == null)
                     const Text('Glasses battery: unavailable'),
-                  if (state.batteryTooLowForWifi)
+                  if (!state.usesBlePreview && state.batteryTooLowForWifi)
                     Text(
                       'Charge the glasses to at least 20% before Wi-Fi photo transfer.',
                       style: TextStyle(color: Theme.of(context).colorScheme.error),
@@ -128,30 +155,37 @@ class _EyevuePanelState extends State<EyevuePanel> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  DropdownButton<String>(
-                    value: _startup,
-                    isExpanded: true,
-                    items: const <DropdownMenuItem<String>>[
-                      DropdownMenuItem<String>(value: 'media', child: Text('Keep Wi-Fi open (experimental)')),
-                      DropdownMenuItem<String>(value: 'capture', child: Text('Capture and fetch (experimental)')),
-                      DropdownMenuItem<String>(value: 'live', child: Text('Alternate startup (experimental)')),
-                    ],
-                    onChanged: state.busy || state.sessionActive
-                        ? null
-                        : (String? value) {
-                            if (value != null) {
-                              setState(() => _startup = value);
-                            }
-                          },
-                  ),
+                  if (!state.usesBlePreview)
+                    ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      title: const Text('Wi-Fi connection options'),
+                      children: <Widget>[
+                        DropdownButton<String>(
+                          value: _wifiStartup,
+                          isExpanded: true,
+                          items: const <DropdownMenuItem<String>>[
+                            DropdownMenuItem<String>(value: 'capture', child: Text('Capture and fetch')),
+                            DropdownMenuItem<String>(value: 'media', child: Text('Keep Wi-Fi open (experimental)')),
+                            DropdownMenuItem<String>(value: 'live', child: Text('Alternate startup (experimental)')),
+                          ],
+                          onChanged: state.canChangePhotoSource
+                              ? (String? value) {
+                                  if (value != null) setState(() => _wifiStartup = value);
+                                }
+                              : null,
+                        ),
+                      ],
+                    ),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: <Widget>[
                       FilledButton.icon(
-                        onPressed: state.canStart ? () => state.startSession(startup: _startup) : null,
+                        onPressed: state.canStart
+                            ? () => state.startSession(startup: state.usesBlePreview ? 'ble_preview' : _wifiStartup)
+                            : null,
                         icon: const Icon(Icons.photo_camera),
-                        label: const Text('Start photo session'),
+                        label: Text(state.usesBlePreview ? 'Start BLE preview' : 'Start photo session'),
                       ),
                       OutlinedButton(
                         onPressed: state.sessionActive && !state.busy ? state.stopSession : null,
@@ -159,10 +193,11 @@ class _EyevuePanelState extends State<EyevuePanel> {
                       ),
                       OutlinedButton(
                         onPressed: state.canCapture ? state.capture : null,
-                        child: const Text('Take photo'),
+                        child: Text(state.usesBlePreview ? 'Take preview' : 'Take photo'),
                       ),
                     ],
                   ),
+                  if (!state.usesBlePreview) ...<Widget>[
                   TextButton.icon(
                     onPressed: state.busy || state.connecting ? null : state.improveWifiDiscovery,
                     icon: const Icon(Icons.wifi_find),
@@ -176,10 +211,11 @@ class _EyevuePanelState extends State<EyevuePanel> {
                   ),
                   if (state.wifiDiscoveryStatus != null)
                     Text(state.wifiDiscoveryStatus!, style: Theme.of(context).textTheme.bodySmall),
+                  ],
                   if (state.busy) const LinearProgressIndicator(),
                   if (image != null) ...<Widget>[
                     const SizedBox(height: 12),
-                    Text('Latest photo: ${image.width} × ${image.height} · ${image.bytes} bytes'),
+                    Text('Latest image: ${image.width} × ${image.height} · ${image.bytes} bytes'),
                     if (image.cachePath.isNotEmpty)
                       Image.file(
                         File(image.cachePath),

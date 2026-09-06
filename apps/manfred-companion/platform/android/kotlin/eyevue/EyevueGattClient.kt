@@ -395,6 +395,9 @@ class EyevueGattClient(
 
     fun isConnected(): Boolean = _state.value == EyevueGattState.CONNECTED
 
+    /** Clear incomplete AA15 bytes at an explicitly owned capture boundary. */
+    fun resetPhotoTransfer() = photoAssembler.reset()
+
     @SuppressLint("MissingPermission")
     private fun closeGatt() {
         val currentGatt = gatt

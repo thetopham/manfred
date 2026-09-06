@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:manfred_companion/src/eyevue_bridge.dart';
 import 'package:manfred_companion/src/eyevue_controller.dart';
 import 'package:manfred_companion/src/eyevue_settings.dart';
+import 'package:manfred_companion/src/eyevue_panel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class FakeBridge implements EyevueBridge {
@@ -85,17 +87,24 @@ class FakeBridge implements EyevueBridge {
 
 class FakeSettings implements EyevueSettings {
   String? value;
+  String? source;
   Completer<String?>? pendingLoad;
+  Completer<String?>? pendingSourceLoad;
   @override
   Future<String?> loadAddress() async => pendingLoad == null ? value : await pendingLoad!.future;
   @override
   Future<void> saveAddress(String address) async { value = address; }
+  @override
+  Future<String?> loadPhotoSource() async => pendingSourceLoad == null ? source : await pendingSourceLoad!.future;
+  @override
+  Future<void> savePhotoSource(String value) async { source = value; }
 }
 
 class FakePermissions implements EyevuePermissionGate {
   Object? sessionFailure;
   Completer<void>? pending;
   int? lastSdk;
+  bool? lastSessionUsesWifi;
   int wifiDiscoveryRequests = 0;
   bool wifiDiscoveryGranted = false;
   bool wifiDiscoveryLocationEnabled = true;
@@ -118,8 +127,9 @@ class FakePermissions implements EyevuePermissionGate {
   @override
   Future<void> requestBluetooth(int? androidSdkInt) async { lastSdk = androidSdkInt; }
   @override
-  Future<void> requestSession(int? androidSdkInt) async {
+  Future<void> requestSession(int? androidSdkInt, {bool usesWifi = true}) async {
     lastSdk = androidSdkInt;
+    lastSessionUsesWifi = usesWifi;
     if (pending != null) {
       await pending!.future;
     }
@@ -162,6 +172,108 @@ void main() {
     controller.dispose();
     await settle();
     await bridge.stream.close();
+  });
+
+
+  test('saved BLE source starts without Wi-Fi permission or its battery threshold', () async {
+    settings.source = 'ble_preview';
+    await controller.initialize();
+    bridge.emitState(<String, Object?>{
+      'battery': <String, Object?>{'percent': 13, 'charging': false},
+    });
+    expect(controller.usesBlePreview, isTrue);
+    expect(controller.canStart, isTrue);
+    await controller.startSession();
+    expect(bridge.lastStartup, 'ble_preview');
+    expect(permissions.lastSessionUsesWifi, isFalse);
+    expect(permissions.wifiDiscoveryRequests, 0);
+    expect(acquired, 1);
+    expect(controller.sessionActive, isTrue);
+    bridge.emitState(<String, Object?>{'ready': true, 'captureSource': 'ble_preview'});
+    await controller.capture();
+    expect(bridge.captures, 1);
+  });
+
+  test('source changes persist and active sessions reject mode switching', () async {
+    await controller.initialize();
+    expect(controller.photoSource, 'wifi');
+    await controller.selectPhotoSource('ble_preview');
+    expect(settings.source, 'ble_preview');
+    await controller.startSession();
+    expect(controller.canChangePhotoSource, isFalse);
+    await controller.selectPhotoSource('wifi');
+    expect(settings.source, 'ble_preview');
+    expect(controller.error, contains('Stop the photo session'));
+    bridge.emitState(<String, Object?>{'sessionActive': false});
+    await settle();
+    await controller.selectPhotoSource('wifi');
+    expect(controller.photoSource, 'wifi');
+    expect(settings.source, 'wifi');
+    await controller.startSession();
+    expect(bridge.lastStartup, 'capture');
+    expect(permissions.lastSessionUsesWifi, isTrue);
+  });
+
+  test('new source selection wins over a slow preference load', () async {
+    settings.pendingSourceLoad = Completer<String?>();
+    final Future<void> initializing = controller.initialize();
+    await settle();
+    await controller.selectPhotoSource('ble_preview');
+    settings.pendingSourceLoad!.complete('wifi');
+    await initializing;
+    expect(controller.photoSource, 'ble_preview');
+    expect(settings.source, 'ble_preview');
+  });
+
+  test('restored active source wins without overwriting the saved idle choice', () async {
+    settings.source = 'ble_preview';
+    bridge.state = <String, Object?>{
+      ...bridge.state, 'sessionActive': true, 'ready': true, 'captureSource': 'wifi',
+    };
+    await controller.initialize();
+    expect(controller.photoSource, 'wifi');
+    expect(controller.canChangePhotoSource, isFalse);
+    expect(settings.source, 'ble_preview');
+    bridge.emitState(<String, Object?>{'sessionActive': false});
+    await settle();
+    expect(controller.photoSource, 'ble_preview');
+  });
+
+  test('invalid saved source preserves Wi-Fi behavior and invalid selections are rejected', () async {
+    settings.source = 'unknown';
+    await controller.initialize();
+    expect(controller.photoSource, 'wifi');
+    await controller.selectPhotoSource('unknown');
+    expect(controller.error, contains('source'));
+    expect(controller.photoSource, 'wifi');
+    await controller.startSession();
+    expect(bridge.lastStartup, 'capture');
+  });
+
+  testWidgets('source selector saves BLE and removes Wi-Fi-only controls', (WidgetTester tester) async {
+    await controller.initialize();
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(
+      child: EyevuePanel(controller: controller),
+    ))));
+    await tester.tap(find.byKey(const Key('eyevue-photo-source')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Instant BLE preview · 320 × 180').last);
+    await tester.pumpAndSettle();
+    expect(settings.source, 'ble_preview');
+    expect(find.text('Take preview'), findsOneWidget);
+    expect(find.text('Improve Wi-Fi discovery'), findsNothing);
+    expect(find.text('Wi-Fi connection options'), findsNothing);
+    bridge.emitState(<String, Object?>{
+      'sessionActive': true, 'ready': true, 'captureSource': 'ble_preview',
+    });
+    await tester.pump();
+    final DropdownButton<String> selector = tester.widget<DropdownButton<String>>(
+      find.byKey(const Key('eyevue-photo-source')),
+    );
+    expect(selector.onChanged, isNull);
+    bridge.emitState(<String, Object?>{'sessionActive': false});
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   test('pushed state wins over stale initialization reply', () async {
@@ -545,6 +657,8 @@ void main() {
     });
     final SharedPreferencesEyevueSettings stored = SharedPreferencesEyevueSettings();
     await stored.saveAddress('eye-vue');
+    await stored.savePhotoSource('ble_preview');
+    expect(await stored.loadPhotoSource(), 'ble_preview');
     expect(await stored.loadAddress(), 'eye-vue');
     final SharedPreferences preferences = await SharedPreferences.getInstance();
     expect(preferences.getString('omi_device_id'), 'omi-original');

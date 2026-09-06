@@ -4,10 +4,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 abstract interface class EyevueSettings {
   Future<String?> loadAddress();
   Future<void> saveAddress(String address);
+  Future<String?> loadPhotoSource();
+  Future<void> savePhotoSource(String source);
 }
 
 class SharedPreferencesEyevueSettings implements EyevueSettings {
   static const String addressKey = 'manfred_eyevue_address_v1';
+  static const String photoSourceKey = 'manfred_eyevue_photo_source_v1';
 
   @override
   Future<String?> loadAddress() async =>
@@ -17,11 +20,20 @@ class SharedPreferencesEyevueSettings implements EyevueSettings {
   Future<void> saveAddress(String address) async {
     await (await SharedPreferences.getInstance()).setString(addressKey, address);
   }
+
+  @override
+  Future<String?> loadPhotoSource() async =>
+      (await SharedPreferences.getInstance()).getString(photoSourceKey);
+
+  @override
+  Future<void> savePhotoSource(String source) async {
+    await (await SharedPreferences.getInstance()).setString(photoSourceKey, source);
+  }
 }
 
 abstract interface class EyevuePermissionGate {
   Future<void> requestBluetooth(int? androidSdkInt);
-  Future<void> requestSession(int? androidSdkInt);
+  Future<void> requestSession(int? androidSdkInt, {bool usesWifi = true});
   Future<bool> hasWifiDiscoveryPermission();
   Future<bool> requestWifiDiscoveryPermission();
   Future<bool> isWifiDiscoveryLocationEnabled();
@@ -63,14 +75,15 @@ class AndroidEyevuePermissionGate implements EyevuePermissionGate {
       ]);
 
   @override
-  Future<void> requestSession(int? androidSdkInt) async {
+  Future<void> requestSession(int? androidSdkInt, {bool usesWifi = true}) async {
     if (androidSdkInt == null) {
       throw StateError('Android version is unavailable; reconnect EyeVue and retry.');
     }
     await _request(<Permission>[
       Permission.bluetoothConnect,
-      if (androidSdkInt >= 33) Permission.nearbyWifiDevices,
-      if (androidSdkInt <= 32) Permission.locationWhenInUse,
+      if (usesWifi && androidSdkInt >= 33) Permission.nearbyWifiDevices,
+      if (androidSdkInt <= 30 || (usesWifi && androidSdkInt <= 32))
+        Permission.locationWhenInUse,
       Permission.notification,
     ]);
   }
