@@ -191,7 +191,23 @@ With the Manfred APK unchanged at **0.5.3+11**, the final Tasker worker passed t
 | Second final replay | **3.777 s** | `send_confirmed`, queue **SENT automatically**, Live End visible, and the existing transcript correctly left open without focus toggling or manual UI actions. |
 | Repeated completed receipt | No new attachment run recorded | `duplicate`; the saved full UI-worker result was unchanged. |
 
-These **3.3–3.8-second** measurements cover selection through UI confirmation in the Tasker attachment stage. They exclude earlier receipt/preparation, BLE shutter, glasses AP discovery and JPEG transfer. They do not measure broadcast-to-image or full shutter-to-ChatGPT latency. Fresh native capture through the whole integration, repeated physical captures and uninterrupted audio remain unverified, and the earlier AP failures are not resolved by these replay results. See [Tasker setup and acceptance](../../integrations/tasker/README.md#current-device-acceptance).
+These **3.3–3.8-second** measurements cover selection through UI confirmation in the Tasker attachment stage. They exclude earlier receipt/preparation, BLE shutter, glasses AP discovery and JPEG transfer. They do not measure broadcast-to-image or full shutter-to-ChatGPT latency. A later fresh native capture was physically attempted and blocked before transfer, as recorded below. Repeated physical delivery and uninterrupted audio remain unverified; these replay results do not resolve the AP failures. See [Tasker setup and acceptance](../../integrations/tasker/README.md#current-device-acceptance).
+
+#### Final physical capture attempt, 0.5.3
+
+The Manfred APK remained **0.5.3+11**. The installed Tasker export had been checked recursively against the final bundle: all **13 actions** (12 worker + 1 dispatcher) matched, including reporting glue and both Java source paths.
+
+| Device time, 2026-09-05 | Observed phase |
+| --- | --- |
+| 20:39:25.468 | Baseline Wi-Fi available after **31.600 s on the discovery/Android-join timer**. This is not a repeat of the earlier 7.712-second AP-phase result. |
+| 20:39:25.594–20:39:30.658 | Baseline loaded at 25.594, phone AP request released at 25.618, and capture armed at 30.658 with battery reporting **60%**. |
+| 20:43:05.541–20:43:07.990 | Physical shutter indication at 05.541, photo-busy at 05.543, then an increased media count and photo completion at 07.990: **2.449 s** for the capture. |
+| 20:43:07.991–20:43:22.255 | Post-capture AP join requested at 07.991; discovery began at 08.579. Fresh scans completed at 15.454 and 22.242 (**6.875 / 13.663 s** from discovery start), with no fresh match; fallback began at 22.255. |
+| 20:44:02.716–20:44:02.756 | Network unavailable at 02.716 (**54.137 s** on the discovery/Android-join timer); session closed at 02.756 with battery reporting **58%**. |
+
+**No new original was saved and no native Tasker receipt arrived.** The latest receipt remained the earlier controlled duplicate. This establishes an attempted physical capture-to-ChatGPT chain blocked at post-capture AP discovery before transfer, not a Tasker upload failure. It does not establish the firmware cause. The separate successful controlled-replay selection/send/completion/dedup checks remain valid.
+
+After the test, the saved 5-GHz home Wi-Fi connection was verified, the temporary keep-awake setting was restored to **0**, screen timeout to **30,000 ms**, and the diagnostic collector was stopped. No private identifiers, raw logs or photos accompany this record.
 
 ## Firmware identification and update architecture
 
