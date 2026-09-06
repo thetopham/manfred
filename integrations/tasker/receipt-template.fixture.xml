@@ -1,0 +1,21 @@
+<TaskerData sr="" dvi="1" tv="6.6.20">
+    <!-- Minimal structure from our authored Tasker exports; no personal backup. -->
+    <Profile sr="prof12" ve="2">
+        <cdate>1788651421074</cdate><clp>true</clp><edate>1788652000000</edate>
+        <id>12</id><mid0>11</mid0><nme>Manfred UI Probe</nme>
+        <Event sr="con0" ve="2">
+            <code>599</code><Str sr="arg0" ve="3">com.thetopham.manfred_companion.UI_PROBE</Str>
+            <Int sr="arg1" val="0"/><Int sr="arg2" val="0"/>
+            <Str sr="arg3" ve="3"/><Str sr="arg4" ve="3"/>
+        </Event>
+    </Profile>
+    <Project sr="proj0" ve="2"><cdate>1788652000000</cdate><name>Manfred_Delivery</name><pids>12</pids><tids>11</tids></Project>
+    <Task sr="task11">
+        <id>11</id><nme>Manfred UI Probe</nme><pri>6</pri>
+        <Action sr="act0" ve="7"><code>20</code><App sr="arg0"><appPkg>example.test.only</appPkg></App></Action>
+        <Action sr="act3" ve="7">
+            <code>129</code><Str sr="arg0" ve="3">var mq_template=1;</Str>
+            <Str sr="arg1" ve="3"/><Int sr="arg2" val="1"/><Int sr="arg3" val="45"/>
+        </Action>
+    </Task>
+</TaskerData>

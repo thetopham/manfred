@@ -1,5 +1,7 @@
 # Manfred
 
+Current implementation, installed-build evidence and unfinished work: [September5/6 Manfred handoff](docs/handoff-2026-09-06.md).
+
 Manfred is the app and its services: the wearable Companion client, Ears audio/transcription, and existing visual evidence capture. The companion now includes an experimental EyeVue photo session; see [EyeVue photos](docs/eyevue-photos.md) for setup and [the E09-family hardware profile](docs/hardware/eyevue-e09.md) for the tested TK8/0201 device, firmware interfaces, and measured capabilities. It activates no backend workers or services.
 
 ## Ownership

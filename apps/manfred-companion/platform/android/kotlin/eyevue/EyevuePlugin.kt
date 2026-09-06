@@ -86,6 +86,9 @@ class EyevuePlugin(
     private var sessionId: String? = null
     private var sessionFailure: String? = null
     private var captureMode = false
+    private var blePreviewMode = false
+    private var sessionStartup: String? = null
+    private var blePreviewRequests: kotlinx.coroutines.channels.Channel<Long>? = null
     private var captureGate: EyevueCaptureCycleGate? = null
     private var captureReceipt: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     private var captureDeadlineJob: Job? = null
@@ -155,6 +158,8 @@ class EyevuePlugin(
         "connected" to gatt.isConnected(),
         "connecting" to connecting,
         "sessionActive" to sessionActive,
+        "startup" to sessionStartup.takeIf { sessionActive },
+        "captureSource" to if (sessionActive) { if (blePreviewMode) "ble_preview" else "wifi" } else null,
         "ready" to ready,
         "status" to status,
         "error" to error,
@@ -436,13 +441,14 @@ class EyevuePlugin(
     }
 
     private fun startSession(startup: String) {
-        require(startup == "media" || startup == "live" || startup == "capture") { "Startup must be media, live, or capture" }
+        require(startup == "media" || startup == "live" || startup == "capture" || startup == "ble_preview") { "Startup must be media, live, capture, or ble_preview" }
         check(gatt.isConnected() && !connecting && !disconnecting) { "Connect the glasses first" }
         check(!sessionActive && sessionJob == null) { "A photo session is already active" }
+        check(captureJob == null) { "Wait for the pending shutter command to finish" }
         check(customer?.project?.uppercase()?.startsWith("TK8") == true) {
             "This photo session currently supports verified TK8 EyeVue glasses only"
         }
-        battery?.let {
+        battery?.takeIf { startup != "ble_preview" }?.let {
             check(it.percent >= 20) {
                 "EyeVue battery is " + it.percent +
                     "%. Charge the glasses to at least 20% before starting photo Wi-Fi."
@@ -452,13 +458,23 @@ class EyevuePlugin(
         val id = UUID.randomUUID().toString()
         sessionId = id
         captureMode = startup == "capture"
+        blePreviewMode = startup == "ble_preview"
+        sessionStartup = startup
         sessionActive = true
         ready = false
         sessionFailure = null
         error = null
-        status = if (startup == "live") "Opening experimental live-mode Wi-Fi" else "Opening EyeVue photo Wi-Fi"
+        status = when (startup) {
+            "ble_preview" -> "Starting EyeVue BLE preview session"
+            "live" -> "Opening experimental live-mode Wi-Fi"
+            else -> "Opening EyeVue photo Wi-Fi"
+        }
         emitState()
         val job = scope.launch(start = CoroutineStart.LAZY) {
+            if (startup == "ble_preview") {
+                runBlePreviewSession(id)
+                return@launch
+            }
             if (startup == "capture") {
                 runCaptureSession(id)
                 return@launch
@@ -524,6 +540,69 @@ class EyevuePlugin(
         job.start()
     }
 
+
+    /** App-triggered AA15 previews only: no AP command, network request, or physical-event loop. */
+    private suspend fun runBlePreviewSession(id: String) {
+        val requests = kotlinx.coroutines.channels.Channel<Long>(1)
+        val capture = EyevueBlePreviewCapture(gatt.photoResults, gatt::write, gatt::resetPhotoTransfer)
+        val store = EyevuePhotoStore(context)
+        blePreviewRequests = requests
+        try {
+            while (true) {
+                currentCoroutineContext().ensureActive()
+                ready = true
+                status = "Ready - use Take preview for a BLE image (typically 320x180)"
+                emitState()
+                val detectedAt = requests.receive()
+                ready = false
+                status = "Taking and receiving the BLE preview"
+                capturePhase("ble_preview_requested")
+                emitState()
+                val bytes = capture.capture()
+                currentCoroutineContext().ensureActive()
+                capturePhase("ble_preview_received")
+                status = "Saving the BLE preview"
+                emitState()
+                store.saveBlePreview(bytes, id, detectedAt) { image ->
+                    latestImage = image
+                    broadcastImageReady(image)
+                    sink?.success(linkedMapOf<String, Any?>("type" to "imageReady").apply { putAll(image) })
+                    emitState()
+                }
+                capturePhase("ble_preview_saved")
+            }
+        } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+            sessionFailure = "The glasses did not return a BLE preview within 12 seconds"
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            sessionFailure = failure.message ?: "EyeVue BLE preview failed"
+            Log.w("EyevuePhotoSession", "BLE preview failed: " + failure.javaClass.simpleName)
+        } finally {
+            // The owned capture drains any accepted AA13 write before reaching
+            // here. No media-mode finish command is appropriate for this BLE path.
+            ready = false
+            requests.close()
+            blePreviewRequests = null
+            gatt.resetPhotoTransfer()
+            blePreviewMode = false
+            sessionActive = false
+            sessionJob = null
+            error = sessionFailure
+            status = sessionFailure ?: if (gatt.isConnected()) "Connected - BLE preview session stopped" else "Disconnected"
+            emitState()
+        }
+    }
+
+    private fun captureBlePreview() {
+        check(sessionActive && blePreviewMode && ready) { "Wait until the BLE preview session is ready" }
+        val requests = blePreviewRequests ?: throw IOException("The BLE preview session is unavailable")
+        ready = false
+        error = null
+        status = "Requesting a BLE preview"
+        check(requests.trySend(System.currentTimeMillis()).isSuccess) { "A BLE preview request is already pending" }
+        emitState()
+    }
 
     /** Keep one logical session while closing Wi-Fi around every shutter. */
     private suspend fun runCaptureSession(id: String) {
@@ -855,6 +934,10 @@ class EyevuePlugin(
 
     private fun capture() {
         check(gatt.isConnected() && !connecting && !disconnecting) { "Connect the glasses first" }
+        if (blePreviewMode) {
+            captureBlePreview()
+            return
+        }
         if (captureMode) {
             captureForCycle()
             return

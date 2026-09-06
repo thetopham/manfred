@@ -27,6 +27,7 @@ The 320 x 180 observation is not a hardcoded pixel limit in Manfred's BLE assemb
 | BLE service | `0000aa12-0000-1000-8000-00805f9b34fb`; AA13 writes commands, AA14 reports command/status data, AA15 carries the BLE photo path. |
 | Command framing | App requests start `AB 55`; this unit's AA14 replies start `AC 55`. The decoder accepts both supported headers and validates length plus the additive command/payload checksum. The earlier AB55-only decoder missed this unit's replies. |
 | Normal shutter | `0x22`, payload `30`, matching the vendor home-screen shutter. The vendor calls this parameter THUMBNAIL; that name alone does not establish the size of the separately stored original. |
+| BLE preview request | `0x22`, payload `31`, requests a new AI-photo capture whose image arrives on AA15. The legacy HIGH_QUALITY name does not establish full-resolution output; the measured image is 320x180. |
 | Media AP startup | `0x39`, payload `30`, followed by the asynchronous SSID report on `0x25`. |
 | Experimental live AP startup | One `0x67`, payload `30`, then wait for SSID. Do not follow it with a media-start request merely to retrieve SSID: that changes the startup sequence. |
 | File listing | HTTP `GET http://192.168.169.1/app/getfilelist`; JSON `info[].files[]` includes name, size, and `createtimestr`. |
@@ -37,6 +38,28 @@ The 320 x 180 observation is not a hardcoded pixel limit in Manfred's BLE assemb
 These are the **TK8 AP** routes, not the alternate P2P/XML routes for other EyeVue projects. The current implementation uses the selected Android Wi-Fi `Network.socketFactory` and network-specific DNS for EyeVue HTTP only; it does not bind the entire app process. This was motivated by a physical timeout routed through the phone's VPN and the user's subsequent successful sync after disabling Tailscale. Simultaneous VPN/Omi behavior still needs its own acceptance test.
 
 Source: [native protocol](../../apps/manfred-companion/platform/android/kotlin/eyevue/EyevueProtocol.kt), [plugin startup/capture](../../apps/manfred-companion/platform/android/kotlin/eyevue/EyevuePlugin.kt), [photo session](../../apps/manfred-companion/platform/android/kotlin/eyevue/EyevuePhotoSession.kt), and vendor `EyevueTLiveActivity.java:36,207-211,230-246` under the source root below.
+
+## BLE preview versus Wi-Fi original
+
+**Manfred0.5.4+12** remembers a BLE-preview or Wi-Fi-original source choice. `startup=ble_preview` uses the app's Take preview action and the existing `buildPhotoPacket(highQuality=true)` request, **0x22 [31]**, with a photo-results subscriber armed before the write. It does not open the glasses AP. Manfred captures have now saved320x180 JPEGs in3.381 and3.250 seconds; the first exact image was independently visible in ChatGPT Live, while Tasker confirmation remains unresolved. See the [handoff](../handoff-2026-09-06.md). The older evidence below belongs to CyanBridge.
+
+The clean [CyanBridge repair](https://github.com/thetopham/Alternative-HeyCyan-App-and-SDK/pull/4), tested at source `66584218b3462c80fe42cb5d9cc45213aa6fe1ce`, produced three consecutive decodable **320x180** JPEGs in **3.399 / 3.514 / 3.576 s**. Its [capture method](https://github.com/thetopham/Alternative-HeyCyan-App-and-SDK/blob/66584218b3462c80fe42cb5d9cc45213aa6fe1ce/android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/devices/eyevue/EyevueManager.kt#L139-L151) waits for the already-armed AA15 result. The [calling flow](https://github.com/thetopham/Alternative-HeyCyan-App-and-SDK/blob/66584218b3462c80fe42cb5d9cc45213aa6fe1ce/android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/MainActivity.kt#L4563-L4616) postpones optional microphone/SCO setup until JPEG assembly completes; earlier overlapping setup correlated with missing BLE packets. This is a tested sequencing constraint, not proof of uninterrupted operation alongside an existing Live session.
+
+Manfred already contains that proven AA15 assembler: start/data/end commands **0x97 / 0x98 / 0x99**, a cumulative unsigned 32-bit data offset, exact announced coverage, bounded terminal zero alignment and gap/conflicting-overlap rejection. It does not resize images to 320x180. The observed result therefore describes this firmware path, not a sensor-resolution ceiling.
+
+The physical glasses shutter produced an ordinary stored photo, photo-busy/idle and a fresh media count, but no AA15 JPEG. In the later [probe results](https://github.com/thetopham/Alternative-HeyCyan-App-and-SDK/blob/c6c3ed3d23ed59cfadb69e4ba42149a2f6213f7b/docs/eyevue-ble-resolution-probe.md#L40-L47), both opaque **0x36** values returned no complete image within 120 seconds, before and after a physical stored photo. No verified BLE command retrieves that same stored original.
+
+Accordingly, Manfred's physical-button path remains **Wi-Fi original only**. Issuing 0x22 [31] after that button would be another exposure, and treating every 0x22/status response as a new trigger could react to the app's own capture. BLE mode will not do either. Wi-Fi mode retains its existing capture-completion gate and new-original retrieval. Optional `imageSource` metadata can identify the resulting image while preserving the existing Tasker receipt contract. The two Manfred BLE saves are documented in the handoff; physical-button triggering, automatic Live confirmation and uninterrupted audio remain unfinished.
+
+### Can firmware increase BLE image resolution?
+
+Increasing ATT MTU or BLE packet size can improve transfer efficiency; it cannot add pixels to a JPEG already encoded by the glasses. The tested `0x22 [31]` request already uses the vendor's HIGH_QUALITY parameter, yet returns a 320x180 preview. No larger-resolution command or encoder width/height setting was verified in the inspected sources or TK8 tests. The [pinned reverse-tool documentation](https://github.com/sctg-development/ai-smart-glasses-e09-reverse/blob/863467cd0f52b77e653fe9307f256c8d9e20511f/README.md#L487-L489) likewise distinguishes BLE previews from Wi-Fi originals.
+
+A firmware change could theoretically configure the camera/ISP to supply a larger JPEG to that BLE path, with more bytes to transfer. There is no demonstrated TK8 patch or buildable camera firmware in these projects. The [downloader implements catalog checking and package retrieval](https://github.com/sctg-development/ai-smart-glasses-e09-firmware-downloader/blob/8667ea4ee70ae5eebee3843f5511d52805786700/README.md#L1-L17); it does not provide a firmware modification toolchain.
+
+The downloader's [lack of client-side image authentication](https://github.com/sctg-development/ai-smart-glasses-e09-firmware-downloader/blob/8667ea4ee70ae5eebee3843f5511d52805786700/README.md#L68-L72) does **not** prove that the glasses accept unsigned firmware. Device-side signatures, encryption, secure boot, and a recovery method remain unknown. The [documented separate main-firmware and Bluetooth update paths](https://github.com/sctg-development/ai-smart-glasses-e09/blob/c32e065ebbea769184df5abda9e43774631e1eca/REVERSE_ENGINEERING_EYEVUE_BLE_PROTOCOL.md#L579-L596) do not identify this unit's exact camera chip. A practical modification investigation would first need its board/ISP identity, a matching firmware image, and offline analysis of encoder settings and update validation; no flash or resolution unlock is established here.
+
+**OTA route correction:** the general protocol writeup's HTTP upload description must not be applied to every variant. The vendor's [non-T updater](https://github.com/sctg-development/ai-smart-glasses-e09/blob/c32e065ebbea769184df5abda9e43774631e1eca/reverse/com.eyevue.glassapp/sources/com/eyevue/glassapp/view/setting/EyevueOtaActivity.java#L787-L798) posts to `http://192.168.49.207/?custom=1&cmd=5001&par=1`; its [T/AP updater](https://github.com/sctg-development/ai-smart-glasses-e09/blob/c32e065ebbea769184df5abda9e43774631e1eca/reverse/com.eyevue.glassapp/sources/com/eyevue/glassapp/view/setting/EyevueTOtaActivity.java#L515-L541) uses raw TCP to `192.168.169.1:5007`, an `A0`/`A1` handshake, a file-size header, and streamed file bytes before result handling. This is vendor-client source evidence, not a firmware upload tested on our TK8. The ability to submit a local file does not establish acceptance of modified firmware, rollback, or recovery from a failed flash.
 
 ## Capture while Wi-Fi is active: evidence and limits
 
@@ -120,17 +143,94 @@ The follow-up **0.5.2 Keep Wi-Fi open** test used the same unplugged glasses at 
 
 Together with the vendor import gate and successful captures after leaving transfer mode, this supports **still-capture rejection in the tested firmware's media-import mode**. It does not establish the internal firmware branch, disablement of every physical button, a universal camera/Wi-Fi hardware exclusion, or equivalent behavior in the distinct live-preview mode.
 
-The successful capture-and-fetch cycles were dominated by Wi-Fi reconnection, not JPEG download. Redacted Android system-log timing further localizes the delay:
+### Reconnect latency investigation (0.5.2, 2026-09-05)
 
-| Stage | First cycle | Second cycle |
+The complete retained Android trace localizes the roughly 30-second delivery delay to **AP discovery before association**. Camera completion took about 2.5 seconds; downloading/saving the original took under half a second. Times below are phone-local; durations are rounded and omit small framework/polling overheads.
+
+| Stage | App shutter cycle, 15:45 | Glasses capture cycle, 15:48 |
 | --- | --- | --- |
-| Approved network / dialog bypass enabled | 15:45:53.153 | 15:48:03.354 |
-| Android initiated connection | 15:46:24.305 | 15:48:27.184 |
-| App received the network | 15:46:25.253 | 15:48:28.963 |
-| Wait before connection initiation | **31.152 s** | **23.830 s** |
-| Connection initiation to app network availability | **0.948 s** | **1.779 s** |
+| BLE AP request to returned AP name | 0.595 s | 0.586 s |
+| First Wi-Fi scan | 15:45:53.160–59.943 (6.783 s) | 15:48:03.360–10.291 (6.931 s) |
+| First result to next scan start | **17.518 s** | **10.016 s** |
+| Second Wi-Fi scan | 15:46:17.461–24.306 (6.845 s) | 15:48:20.307–27.185 (6.878 s) |
+| Connection initiation to app availability | 0.948 s | 1.779 s |
+| Entire AP rejoin | **32.708 s** | **26.209 s** |
+| Original download/save | 498 ms | 257 ms |
+| Shutter event to saved original | **36.650 s** | **29.781 s** |
 
-Android explicitly bypassed the user approval dialog. The long interval likely involves AP discovery or selection, but retained logs do not contain the scan-result and DHCP transition events needed to isolate it further. Manfred has no deliberate 30-second reconnect delay. The next useful measurement is request submission, scan start, first matching AP result, and connection initiation. Download/save itself took 498 ms and 257 ms; these are foreground observations, not background latency guarantees. Raw logs containing network identifiers and the photographed images remain private local artifacts.
+Android reused remembered approval and bypassed the dialog. Four later successful joins also missed GLASSES_AP in the first fresh scan and found it in the second, after a **17.50-second** retry gap; availability followed that match in 0.708–1.642 seconds. The later successful glasses-side capture saved a **3200 x 2400**, **266,148-byte** JPEG at **17:05:42.032**, 30.622 seconds after its firmware shutter event. Its AP rejoin took 27.012 seconds and download/save 334 ms.
+
+Android 16 r1's pinned [WifiNetworkFactory](https://android.googlesource.com/platform/packages/modules/Wifi/+/14c1216a43e60884e189a66d93d7c179a86ca4f5/service/java/com/android/server/wifi/WifiNetworkFactory.java#110) defines a 10-second periodic scan interval and three approved-scan attempts; [scheduleNextPeriodicScan](https://android.googlesource.com/platform/packages/modules/Wifi/+/14c1216a43e60884e189a66d93d7c179a86ca4f5/service/java/com/android/server/wifi/WifiNetworkFactory.java#1631) schedules an elapsed-time alarm after results. This explains why another scan can add a substantial wait, but does **not** establish the cause of Samsung's measured 17.50-second delivery interval. The source is Android 16 reference behavior, not proof of the exact installed Samsung implementation.
+
+#### Discovery failures and a cached-result failure
+
+- **16:48:40.513 baseline request:** three results at 16:48:47.815, 16:49:11.958 and 16:49:36.031 contained 34/29/36 APs with no active-request match. Session failure followed at 16:49:36.049. No authentication or DHCP began.
+- **16:52:36.434 photo rejoin:** a new request followed a successful offline shutter, separate from the baseline AP that had closed at 16:52:01.146. Results at 16:52:43.520, 16:53:07.402 and 16:53:31.793 contained 33/36/32 APs with no match. Cleanup was later at 16:53:31.820. A retained cache table's observation ages place its entries at 16:53:24–31, **during this active request**: 19 other 2.4-GHz APs were present, but the known GLASSES_AP name/address was absent. The table contains cross-scan cached entries, not just the final result batch. This supports failed discovery, not a proven password or DHCP problem.
+- **17:00:59.226 cached match:** Android immediately selected a previously cached GLASSES_AP. At 17:01:01.539 the driver reported `status_code=1027`, `auth_no_resp_received`; three rapid retries returned status 1 before abandonment at 17:01:01.985. DHCP never began. A cached identity and the BLE AP-name reply did not prove the restarted AP was ready to answer. Its precise failure cause remains unknown.
+
+The vendor app was launched at 16:53:57.103, after both controlled failures. Manfred reopened at 16:56:59.918 and its next AP request was at 16:58:27.258; no Manfred session AP request overlapped that vendor foreground interval. Background interference is unproven. Later manual attempts included both successful joins and further failures. Restarting a session creates a new album baseline, so it does not automatically retrieve a photo left behind by the previous failed session; the glasses originals remain intact.
+
+#### Why home Wi-Fi disconnects
+
+The Samsung Galaxy S25's retained configuration reports **config_wifiMultiStaLocalOnlyConcurrencyEnabled=false**, and these local-only sessions use the primary **wlan0** interface. The controlled cycles show Manfred releasing GLASSES_AP after transfer, followed by HOME_AP reconnecting about four seconds later. This is the visible switching in capture-and-fetch, not evidence of repeated accidental app reconnects.
+
+Later supervised ChatGPT testing found Wi-Fi enabled but disconnected, a **validated cellular default network**, and no VPN. Both saved home-network profiles had **auto reconnect off**. Live displayed **Poor connection**; the exact image progressed from **Uploading attachment** to **Unsent / Retry**. After manually reconnecting the saved 5-GHz HOME_AP and enabling that profile's auto reconnect, an image-specific manual Retry produced a new detailed reply while the Live **End** control was present. This verifies that retry on the restored home connection succeeded; it does not isolate the cellular-path failure. It also does not explain the separate GLASSES_AP discovery failures. The later controlled-replay checks below verify automatic UI submission on the restored connection; fresh native capture through that handoff and uninterrupted voice remain unverified.
+
+Pinned Android 16 [ActiveModeWarden](https://android.googlesource.com/platform/packages/modules/Wifi/+/14c1216a43e60884e189a66d93d7c179a86ca4f5/service/java/com/android/server/wifi/ActiveModeWarden.java#649) gates a second local-only station on that setting and hardware support. This is the observed phone configuration, not a claim that its chipset can never support concurrent stations. Routing only EyeVue HTTP through the granted Network avoids binding the whole app, but cannot preserve the home Wi-Fi link when Android repurposes its sole active station. Internet/voice continuity still needs measurement with the intended cellular/VPN setup.
+
+GLASSES_AP was actually observed on **2452, 2457 and 2462 MHz (channels 9, 10 and 11)** across successful cycles, including the later 0.5.3 baseline; it was not hidden. The earlier failed scans found other 2.4-GHz APs while the known glasses AP was absent. No observed channel-12/13 or regulatory mismatch explains these failures; hard-coding one historical channel would be unjustified.
+
+#### Installed 0.5.3 discovery experiment
+
+Installed **0.5.3+11**, source [`d513944`](https://github.com/thetopham/manfred/commit/d513944fabe8cfcdfe2c1f4db3417b0c122c8adb), passed **58 Flutter and 99 native tests**. **Improve Wi-Fi discovery** requests optional Precise location permission; Android Location services must also be enabled for app-visible scans. It does not make those permissions a requirement for standard photo transfer.
+
+The [connection implementation](../../apps/manfred-companion/platform/android/kotlin/eyevue/EyevueApConnection.kt) allows at most two fresh scans within 16 seconds. Its [selection policy](../../apps/manfred-companion/platform/android/kotlin/eyevue/EyevueApDiscoveryPolicy.kt) requires the exact AP name/WPA2-PSK security and an observation newer than this join attempt, at most 10 seconds old. Only then does it use the observed BSSID and, on supported Android versions, frequency as connection hints. It does not reuse a hard-coded channel or a previous-cycle address as readiness evidence.
+
+Missing permission, disabled Location, rejected/failed scans, or no timely fresh match fall back to the existing SSID request. Discovery and that one network request share a 65-second deadline; fallback does not guarantee a faster join.
+
+The first supervised 0.5.3 measurements used glasses reporting **67%**. The runtime Android concurrency query independently returned **false**.
+
+| AP phase requested | Observed 0.5.3 outcome |
+| --- | --- |
+| 17:55:32.729, initial baseline | Fresh scans completed at 17:55:36.604 and 17:55:39.834 with no fresh match. The fallback request started at 17:55:39.859 and became unavailable at 17:56:25.683: **52.954 s** from AP-phase start. |
+| 18:06:31.930, baseline retry | Scans completed at 18:06:35.744 and 18:06:38.969. A fresh match on **2462 MHz** was selected at 18:06:38.989; request submitted at 18:06:38.992; network available at **18:06:39.642**. Baseline loaded at 18:06:39.785, phone released AP at 18:06:39.824, and Ready returned at 18:06:44.877. |
+| 18:07:39.677, new-photo retrieval | The app shutter at 18:07:37.134 completed at 18:07:39.675 (**2.541 s**). Fresh scans at 18:07:43.546 and 18:07:46.819 found no fresh match. Fallback began at 18:07:46.845; network unavailable at 18:08:32.655; cleanup released the request at 18:08:32.693. No new local original was saved by this attempt. |
+| 18:15:17.245, baseline at 67% | Both fresh scans completed without a match by 18:15:24.282. Fallback began at 18:15:24.307; unavailable at 18:16:10.109: **52.864 s** from AP-phase start. The phone request was released at 18:16:10.148. |
+| 18:21:05.089, baseline at 90% | Both fresh scans completed without a match by 18:21:12.250. Fallback began at 18:21:12.271; unavailable at 18:21:58.145: **53.056 s** from AP-phase start. The phone request was released at 18:21:58.179. |
+| 18:24:38.553, baseline at 85% | Both fresh scans completed without a match by 18:24:45.611. Fallback began at 18:24:45.634; unavailable at 18:25:31.495: **52.942 s** from AP-phase start. The phone request was released at 18:25:31.525. |
+
+The successful retry took **7.712 s from BLE AP-phase request to network availability**, compared with the earlier 26–33 s AP phases. The narrower discovery/Android-join timer reported **7.122 s**, excluding the preceding BLE AP-name exchange. Its fresh scans ran back-to-back, with only 23 ms between the first completion and second acceptance, then availability followed network request submission in 650 ms. This verifies **one faster baseline join**, not reliable photo delivery: the initial baseline, subsequent photo rejoin and three further baselines through 18:25 still failed. The later failures occurred at reported levels of 67%, 90% and 85%; they are not confined to an immediate photo rejoin or to the previously observed low-battery condition. Each completed two fresh scans, found no fresh match, then received Android network-unavailable after the fallback request. These observations establish a discovery/availability failure, not a firmware cause or an AP-toggle command. Reliable repeat capture/fetch, fallback and fresh-native-capture handoff remain unaccepted; separate controlled-replay UI results are recorded below. Private raw logs, AP identities and images are not included in this repository.
+
+The observed start/finish pattern does not establish a toggle command. Pinned vendor [command parameters](https://github.com/sctg-development/ai-smart-glasses-e09/blob/c32e065ebbea769184df5abda9e43774631e1eca/reverse/com.eyevue.glassapp/sources/com/eyevue/glassapp/bluetooth/protocol/Command.java#L104-L105) define 0x30/0x31 as AP/P2P modes for 0x39. Its [import teardown](https://github.com/sctg-development/ai-smart-glasses-e09/blob/c32e065ebbea769184df5abda9e43774631e1eca/reverse/com.eyevue.glassapp/sources/defpackage/iec.java#L758-L780) uses the same **0x44 [30,01]** finish-without-clearing packet as Manfred, followed by Android network release. The connector contains no additional BLE/HTTP AP-stop command. A finish receipt and camera-idle status do not prove beacon shutdown: the vendor's isImport flag requires a tenth status byte, which the observed nine-byte TK8 frame lacks. The next discriminating measurement is fresh AP presence after finish/release **before another 0x39**, then after it; no alternate stop opcode or protocol change is justified by this source audit.
+
+
+#### Supervised Tasker UI delivery, separate from capture latency
+
+With the Manfred APK unchanged at **0.5.3+11**, the final Tasker worker passed two supervised controlled replays of saved originals. The first result was independently verified with a fresh UI snapshot showing the image, a new reply, no remaining draft and Live End. The phone's completion switch was then enabled through an exact-result/held-owner guard; another installation still defaults to unset.
+
+| Controlled replay | Measured Tasker attachment stage | Verified outcome |
+| --- | --- | --- |
+| First final replay | **3.312 s** | Exact-file ACTION_CLICK and native Send; submission/new-image/network checks true, error/upload checks false, and Live End visible. |
+| Second final replay | **3.777 s** | `send_confirmed`, queue **SENT automatically**, Live End visible, and the existing transcript correctly left open without focus toggling or manual UI actions. |
+| Repeated completed receipt | No new attachment run recorded | `duplicate`; the saved full UI-worker result was unchanged. |
+
+These **3.3–3.8-second** measurements cover selection through UI confirmation in the Tasker attachment stage. They exclude earlier receipt/preparation, BLE shutter, glasses AP discovery and JPEG transfer. They do not measure broadcast-to-image or full shutter-to-ChatGPT latency. A later fresh native capture was physically attempted and blocked before transfer, as recorded below. Repeated physical delivery and uninterrupted audio remain unverified; these replay results do not resolve the AP failures. See [Tasker setup and acceptance](../../integrations/tasker/README.md#current-device-acceptance).
+
+#### Final physical capture attempt, 0.5.3
+
+The Manfred APK remained **0.5.3+11**. The installed Tasker export had been checked recursively against the final bundle: all **13 actions** (12 worker + 1 dispatcher) matched, including reporting glue and both Java source paths.
+
+| Device time, 2026-09-05 | Observed phase |
+| --- | --- |
+| 20:39:25.468 | Baseline Wi-Fi available after **31.600 s on the discovery/Android-join timer**. This is not a repeat of the earlier 7.712-second AP-phase result. |
+| 20:39:25.594–20:39:30.658 | Baseline loaded at 25.594, phone AP request released at 25.618, and capture armed at 30.658 with battery reporting **60%**. |
+| 20:43:05.541–20:43:07.990 | Physical shutter indication at 05.541, photo-busy at 05.543, then an increased media count and photo completion at 07.990: **2.449 s** for the capture. |
+| 20:43:07.991–20:43:22.255 | Post-capture AP join requested at 07.991; discovery began at 08.579. Fresh scans completed at 15.454 and 22.242 (**6.875 / 13.663 s** from discovery start), with no fresh match; fallback began at 22.255. |
+| 20:44:02.716–20:44:02.756 | Network unavailable at 02.716 (**54.137 s** on the discovery/Android-join timer); session closed at 02.756 with battery reporting **58%**. |
+
+**No new original was saved and no native Tasker receipt arrived.** The latest receipt remained the earlier controlled duplicate. This establishes an attempted physical capture-to-ChatGPT chain blocked at post-capture AP discovery before transfer, not a Tasker upload failure. It does not establish the firmware cause. The separate successful controlled-replay selection/send/completion/dedup checks remain valid.
+
+After the test, the saved 5-GHz home Wi-Fi connection was verified, the temporary keep-awake setting was restored to **0**, screen timeout to **30,000 ms**, and the diagnostic collector was stopped. No private identifiers, raw logs or photos accompany this record.
 
 ## Firmware identification and update architecture
 
@@ -173,6 +273,12 @@ The package and a labeled catalog evidence JSON are retained as local artifacts,
 ### Check using the installed Bluetooth version
 
 After the real device read, a separate [official request with `deviceVersion=1.1.9&code=TK80201`](https://platform.eyevue-glass.com/api/app/ota/getNewOtaPackage?deviceVersion=1.1.9&code=TK80201) returned **HTTP 200**, `success: true`, and `data: {"wifi": null, "ble": null}` on **2026-09-05**. The vendor endpoint offered no package for this lookup. This is narrower than a claim that all firmware is current: the request follows the vendor app's Bluetooth-version contract and does not independently compare ISP 3.3.7 with a complete ISP release catalog. No update was installed.
+
+### Offline package follow-up
+
+A repeat official lookup at **2026-09-05 21:26 MDT** again returned HTTP 200 and no BLE or Wi-Fi package for installed BT 1.1.9 / TK80201. A separately labeled inventory query with placeholder 0.0.0 and the same profile again returned only the catalog's **BLE 1.1.9** package; the placeholder does not establish update eligibility. The package was downloaded again and independently matched the **1,809,504-byte** size and SHA-256 above.
+
+Offline inspection found a candidate 12-entry updater directory containing UART, EDR, USB, SD, BLE and flash-loader names, with internally contiguous, bounded entries. No readable camera/encoder resolution symbol or adjacent common image-dimension pair was identified. This limited negative search cannot exclude encoded or separately stored settings; high byte entropy does not prove encryption. **No matching Wi-Fi/ISP 3.3.7 image was offered**, so no camera encoder patch or resolution unlock was established. Binaries and catalog responses remain outside Git, and nothing was executed or sent to the glasses.
 
 ## Decisions for the next hardware test
 
