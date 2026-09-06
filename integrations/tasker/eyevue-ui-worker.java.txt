@@ -1,0 +1,1007 @@
+// Tasker Java Code (BeanShell), tested target Android 16; requires API 33+.
+// See eyevue-ui-worker.md.
+// Never use this action without the receipt queue and both stage gates.
+import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.AccessibilityServiceInfo;
+import android.accessibilityservice.GestureDescription;
+import android.content.ContentResolver;
+import android.app.KeyguardManager;
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.database.Cursor;
+import android.graphics.BitmapFactory;
+import android.graphics.Path;
+import android.graphics.Rect;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.os.Environment;
+import android.provider.OpenableColumns;
+import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
+import com.joaomgcd.taskerm.action.java.ClassImplementation;
+import java.io.InputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+JSONObject mqTapDiagnostic = new JSONObject();
+JSONArray mqTapAttempts = new JSONArray();
+JSONObject mqSendDiagnostic = new JSONObject();
+JSONObject mqImageDiagnostic = new JSONObject();
+
+String mqValue(String name) {
+    String value = tasker.getVariable(name);
+    return value == null ? "" : value;
+}
+
+String mqConfigured(String name, String observedDefault) {
+    String value = mqValue(name);
+    return value.length() == 0 ? observedDefault : value;
+}
+
+void mqFail(String reason) { throw new IllegalStateException("mq:" + reason); }
+
+// Queue ownership is checked independently of the action-local gate.
+JSONObject mqOwnedImage(String id, String owner, String requiredState) {
+    JSONObject state = new JSONObject(mqValue("ManfredEyevueQueue"));
+    if (state.getInt("version") != 1) mqFail("queue_version");
+    JSONArray items = state.getJSONArray("items");
+    if (items.length() > 256) mqFail("queue_size");
+    JSONObject found = null;
+    int active = 0;
+    for (int i = 0; i < items.length(); i++) {
+        JSONObject item = items.getJSONObject(i);
+        String itemState = item.getString("state");
+        if (itemState.equals("claimed") || itemState.equals("sending") || itemState.equals("held")) active++;
+        if (id.equals(item.getJSONObject("image").getString("id"))) {
+            if (found != null) mqFail("duplicate_queue_id");
+            found = item;
+        }
+    }
+    if (active != 1 || found == null || !requiredState.equals(found.getString("state")) || !owner.equals(found.optString("owner", ""))) mqFail("queue_owner_state");
+    JSONObject image = found.getJSONObject("image");
+    String[] fields = new String[] {"uri", "fileName", "bytes", "width", "height", "sha256"};
+    String[] locals = new String[] {"mq_uri", "mq_filename", "mq_bytes", "mq_width", "mq_height", "mq_sha256"};
+    for (int i = 0; i < fields.length; i++) {
+        if (!String.valueOf(image.get(fields[i])).equals(mqValue(locals[i]))) mqFail("receipt_local_mismatch");
+    }
+    if (!id.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}") || !owner.matches("[A-Za-z0-9_-]{8,96}")) mqFail("receipt_identity");
+    if (!image.getString("uri").matches("content://media/(external|external_primary)/images/media/[1-9][0-9]*")) mqFail("receipt_uri");
+    if (!image.getString("fileName").matches("EyeVue_[1-9][0-9]{0,15}_" + id.substring(0, 8) + "\\.jpg")) mqFail("receipt_filename");
+    if (!image.getString("sha256").matches("[0-9a-f]{64}")) mqFail("receipt_hash");
+    if (image.getLong("bytes") < 4 || image.getLong("bytes") > 33554432 || image.getLong("width") <= 0 || image.getLong("width") > 65535 || image.getLong("height") <= 0 || image.getLong("height") > 65535) mqFail("receipt_image_bounds");
+    return image;
+}
+
+String mqHex(byte[] bytes) {
+    StringBuffer hex = new StringBuffer();
+    for (int i = 0; i < bytes.length; i++) {
+        int value = bytes[i] & 255;
+        if (value < 16) hex.append("0");
+        hex.append(Integer.toHexString(value));
+    }
+    return hex.toString();
+}
+
+// No filesystem paths or gallery-latest fallback. Read only the granted receipt URI.
+void mqVerifyImage(JSONObject image) {
+    ContentResolver resolver = context.getContentResolver();
+    Uri uri = Uri.parse(image.getString("uri"));
+    if (!"image/jpeg".equals(resolver.getType(uri))) mqFail("uri_mime_mismatch");
+    Cursor cursor = null;
+    try {
+        cursor = resolver.query(uri, new String[] {OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE}, null, null, null);
+        if (cursor == null || cursor.getCount() != 1 || !cursor.moveToFirst()) mqFail("uri_metadata_missing");
+        int nameColumn = cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME);
+        int sizeColumn = cursor.getColumnIndexOrThrow(OpenableColumns.SIZE);
+        if (!image.getString("fileName").equals(cursor.getString(nameColumn))) mqFail("uri_filename_mismatch");
+        if (cursor.isNull(sizeColumn) || cursor.getLong(sizeColumn) != image.getLong("bytes")) mqFail("uri_size_mismatch");
+    } finally { if (cursor != null) cursor.close(); }
+    MessageDigest digest = MessageDigest.getInstance("SHA-256");
+    InputStream stream = null;
+    long readBytes = 0;
+    long deadline = SystemClock.elapsedRealtime() + 10000;
+    try {
+        stream = resolver.openInputStream(uri);
+        if (stream == null) mqFail("uri_unreadable");
+        byte[] buffer = new byte[32768];
+        int count;
+        while ((count = stream.read(buffer)) != -1) {
+            readBytes += count;
+            if (readBytes > image.getLong("bytes") || readBytes > 33554432) mqFail("uri_read_limit");
+            if (SystemClock.elapsedRealtime() > deadline) mqFail("uri_read_timeout");
+            digest.update(buffer, 0, count);
+        }
+    } finally { if (stream != null) stream.close(); }
+    if (readBytes != image.getLong("bytes")) mqFail("uri_length_mismatch");
+    if (!image.getString("sha256").equals(mqHex(digest.digest()))) mqFail("uri_hash_mismatch");
+    BitmapFactory.Options options = new BitmapFactory.Options();
+    options.inJustDecodeBounds = true;
+    try {
+        stream = resolver.openInputStream(uri);
+        if (stream == null) mqFail("uri_unreadable");
+        BitmapFactory.decodeStream(stream, null, options);
+    } finally { if (stream != null) stream.close(); }
+    if (options.outWidth != image.getInt("width") || options.outHeight != image.getInt("height")) mqFail("uri_dimensions_mismatch");
+}
+
+JSONObject mqLedgerRead() {
+    String raw = mqValue("ManfredEyevueUiLedger");
+    return raw.length() == 0 ? new JSONObject() : new JSONObject(raw);
+}
+
+void mqLedgerWrite(JSONObject ledger, String phase) {
+    ledger.put("phase", phase);
+    ledger.put("updatedElapsedMs", SystemClock.elapsedRealtime());
+    String encoded = ledger.toString();
+    tasker.setVariable("ManfredEyevueUiLedger", encoded);
+    if (!encoded.equals(mqValue("ManfredEyevueUiLedger"))) mqFail("ui_ledger_write_failed");
+}
+
+boolean mqNodeMatches(AccessibilityNodeInfo node, String pkg, String kind, String value) {
+    CharSequence actualPackage = node.getPackageName();
+    if (actualPackage == null || !pkg.equals(actualPackage.toString()) || (!kind.equals("image_diagnostic") && (!node.isVisibleToUser() || !node.isEnabled()))) return false;
+    if (kind.equals("id")) return value.equals(node.getViewIdResourceName());
+    CharSequence text = node.getText();
+    CharSequence description = node.getContentDescription();
+    if (kind.equals("file")) return !node.isEditable() && ((text != null && value.equals(text.toString())) || (description != null && (value.equals(description.toString()) || description.toString().startsWith(value + ", "))));
+    return (text != null && value.equals(text.toString())) || (description != null && value.equals(description.toString()));
+}
+
+// All interactive windows, including inactive Compose popups. Never retain UI text.
+// The return value contains node/window objects for this snapshot only.
+List mqFind(AccessibilityService service, String packageName, String kind, String exactValue) {
+    ArrayList matches = new ArrayList();
+    HashSet seen = new HashSet();
+    List windows = service.getWindows();
+    if (windows.size() > 32) mqFail("too_many_windows");
+    long deadline = SystemClock.elapsedRealtime() + 2000;
+    int visited = 0;
+    for (int wi = 0; wi < windows.size(); wi++) {
+        AccessibilityWindowInfo window = (AccessibilityWindowInfo) windows.get(wi);
+        AccessibilityNodeInfo root = window.getRoot();
+        if (root == null) continue;
+        ArrayList pending = new ArrayList();
+        pending.add(root);
+        for (int ni = 0; ni < pending.size(); ni++) {
+            if (++visited > 5000 || SystemClock.elapsedRealtime() > deadline) mqFail("ui_scan_incomplete");
+            AccessibilityNodeInfo node = (AccessibilityNodeInfo) pending.get(ni);
+            boolean matched = mqNodeMatches(node, packageName, kind, exactValue);
+            if (matched && kind.equals("file")) {
+                // A filename text child and its described file-row parent are one
+                // result. Also exclude text descendants of an editable search box.
+                AccessibilityNodeInfo parent = node.getParent();
+                for (int depth = 0; parent != null && depth < 12; depth++) {
+                    if (parent.isEditable() || mqNodeMatches(parent, packageName, kind, exactValue)) { matched = false; break; }
+                    parent = parent.getParent();
+                }
+            }
+            if (matched) {
+                Rect bounds = new Rect();
+                node.getBoundsInScreen(bounds);
+                if (!bounds.isEmpty() && seen.add(window.getId() + ":" + bounds.flattenToString())) {
+                    ArrayList match = new ArrayList();
+                    match.add(node);
+                    match.add(window);
+                    matches.add(match);
+                }
+            }
+            for (int ci = 0; ci < node.getChildCount(); ci++) {
+                if (pending.size() >= 5000) mqFail("ui_scan_incomplete");
+                AccessibilityNodeInfo child = node.getChild(ci);
+                if (child != null) pending.add(child);
+            }
+        }
+    }
+    return matches;
+}
+
+List mqOne(AccessibilityService service, String pkg, String kind, String value, long timeoutMs) {
+    long deadline = SystemClock.elapsedRealtime() + timeoutMs;
+    do {
+        List matches = mqFind(service, pkg, kind, value);
+        if (matches.size() > 1) mqFail("selector_ambiguous");
+        if (matches.size() == 1) return (List) matches.get(0);
+        if (SystemClock.elapsedRealtime() >= deadline) return null;
+        SystemClock.sleep(200);
+    } while (true);
+}
+
+boolean mqPresent(AccessibilityService service, String pkg, String label) {
+    List matches = mqFind(service, pkg, "label", label);
+    if (matches.size() > 1) mqFail("selector_ambiguous");
+    return matches.size() == 1;
+}
+
+// Normalize only the observed ChatGPT Camera/Photos/Files popup, never an
+// unknown dialog or a draft. The popup must be above the current voice entry.
+boolean mqDismissInitialAttachmentPopup(AccessibilityService service, String pkg) {
+    List voices = mqFind(service, pkg, "label", "End");
+    if (voices.size() == 0) voices = mqFind(service, pkg, "label", "Start a voice conversation");
+    if (voices.size() != 1) return false;
+    AccessibilityWindowInfo base = (AccessibilityWindowInfo) ((List) voices.get(0)).get(1);
+    List files = mqFind(service, pkg, "label", "Files");
+    List cameras = mqFind(service, pkg, "label", "Camera");
+    List photos = mqFind(service, pkg, "label", "Photos");
+    HashSet candidates = new HashSet();
+    for (int fi = 0; fi < files.size(); fi++) {
+        AccessibilityWindowInfo popup = (AccessibilityWindowInfo) ((List) files.get(fi)).get(1);
+        if (popup.getId() == base.getId() || popup.getLayer() <= base.getLayer()) continue;
+        AccessibilityNodeInfo root = popup.getRoot();
+        if (root == null || root.getPackageName() == null || !pkg.equals(root.getPackageName().toString())) continue;
+        boolean cameraFound = false;
+        boolean photoFound = false;
+        for (int ci = 0; ci < cameras.size(); ci++) {
+            AccessibilityWindowInfo candidate = (AccessibilityWindowInfo) ((List) cameras.get(ci)).get(1);
+            if (candidate.getId() == popup.getId()) cameraFound = true;
+        }
+        for (int pi = 0; pi < photos.size(); pi++) {
+            AccessibilityWindowInfo candidate = (AccessibilityWindowInfo) ((List) photos.get(pi)).get(1);
+            if (candidate.getId() == popup.getId()) photoFound = true;
+        }
+        if (cameraFound && photoFound) candidates.add(Integer.valueOf(popup.getId()));
+    }
+    if (candidates.size() == 0) return false;
+    if (candidates.size() != 1) mqFail("initial_attachment_popup_ambiguous");
+    if (mqPresent(service, pkg, "Remove")) mqFail("existing_attachment_draft");
+    int popupId = ((Integer) candidates.iterator().next()).intValue();
+    boolean stillKnownPopup = false;
+    List beforeBack = mqFind(service, pkg, "label", "Files");
+    for (int i = 0; i < beforeBack.size(); i++) {
+        AccessibilityWindowInfo window = (AccessibilityWindowInfo) ((List) beforeBack.get(i)).get(1);
+        if (window.getId() == popupId) stillKnownPopup = true;
+    }
+    if (!stillKnownPopup) return false;
+    if (!service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)) mqFail("initial_attachment_popup_back_rejected");
+    long deadline = SystemClock.elapsedRealtime() + 3000;
+    do {
+        boolean popupStillPresent = false;
+        List remaining = mqFind(service, pkg, "label", "Files");
+        for (int i = 0; i < remaining.size(); i++) {
+            AccessibilityWindowInfo window = (AccessibilityWindowInfo) ((List) remaining.get(i)).get(1);
+            if (window.getId() == popupId) popupStillPresent = true;
+        }
+        if (!popupStillPresent && (mqPresent(service, pkg, "End") || mqPresent(service, pkg, "Start a voice conversation"))) return true;
+        if (SystemClock.elapsedRealtime() >= deadline) break;
+        SystemClock.sleep(200);
+    } while (true);
+    mqFail("initial_attachment_popup_not_dismissed");
+    return false;
+}
+
+boolean mqTileContainsFile(AccessibilityNodeInfo tile, String pkg, String fileName) {
+    ArrayList pending = new ArrayList();
+    pending.add(tile);
+    for (int i = 0; i < pending.size(); i++) {
+        if (i >= 128) mqFail("picker_file_tile_scan_incomplete");
+        AccessibilityNodeInfo child = (AccessibilityNodeInfo) pending.get(i);
+        if (mqNodeMatches(child, pkg, "file", fileName)) return true;
+        for (int ci = 0; ci < child.getChildCount(); ci++) {
+            if (pending.size() >= 128) mqFail("picker_file_tile_scan_incomplete");
+            AccessibilityNodeInfo descendant = child.getChild(ci);
+            if (descendant != null) pending.add(descendant);
+        }
+    }
+    return false;
+}
+
+// DocumentsUI's normal-grid title footer does not select the file on the S25.
+// Global exact-file uniqueness was checked by mqOne; resolve that result's own
+// known item_root ancestor, or its observed compact-grid described clickable row.
+AccessibilityNodeInfo mqFileTapTarget(AccessibilityNodeInfo exact, String pkg, String fileName) {
+    if (!pkg.equals("com.google.android.documentsui") && !pkg.equals("com.android.documentsui")) mqFail("picker_file_package_invalid");
+    if (!exact.refresh() || !mqNodeMatches(exact, pkg, "file", fileName) || (pkg + ":id/preview_icon").equals(exact.getViewIdResourceName())) mqFail("picker_file_result_stale");
+    AccessibilityNodeInfo candidate = exact;
+    AccessibilityNodeInfo compactRow = null;
+    for (int depth = 0; candidate != null && depth < 16; depth++) {
+        if (!candidate.refresh()) mqFail("picker_file_tile_stale");
+        CharSequence actualPackage = candidate.getPackageName();
+        boolean samePackage = actualPackage != null && pkg.equals(actualPackage.toString());
+        if (samePackage && candidate.isVisibleToUser() && candidate.isEnabled() && candidate.isClickable() && !candidate.isEditable()) {
+            if ((pkg + ":id/item_root").equals(candidate.getViewIdResourceName())) {
+                if (!mqTileContainsFile(candidate, pkg, fileName)) mqFail("picker_file_tile_changed");
+                return candidate;
+            }
+            CharSequence description = candidate.getContentDescription();
+            if (compactRow == null && description != null && description.toString().startsWith(fileName + ", ") && !(pkg + ":id/preview_icon").equals(candidate.getViewIdResourceName())) compactRow = candidate;
+        }
+        candidate = candidate.getParent();
+    }
+    if (compactRow != null) {
+        if (!compactRow.refresh() || !mqNodeMatches(compactRow, pkg, "file", fileName) || !compactRow.isClickable()) mqFail("picker_file_tile_changed");
+        return compactRow;
+    }
+    mqFail("picker_file_tile_not_identified");
+    return null;
+}
+
+boolean mqContainsOnlySend(AccessibilityNodeInfo parent, String pkg) {
+    ArrayList pending = new ArrayList();
+    pending.add(parent);
+    int sendNodes = 0;
+    for (int i = 0; i < pending.size(); i++) {
+        if (i >= 64) mqFail("send_parent_scan_incomplete");
+        AccessibilityNodeInfo node = (AccessibilityNodeInfo) pending.get(i);
+        if (node.isVisibleToUser()) {
+            CharSequence text = node.getText();
+            CharSequence description = node.getContentDescription();
+            boolean hasText = text != null && text.toString().trim().length() > 0;
+            boolean hasDescription = description != null && description.toString().trim().length() > 0;
+            if (hasText || hasDescription) {
+                CharSequence actualPackage = node.getPackageName();
+                if (actualPackage == null || !pkg.equals(actualPackage.toString())) return false;
+                if (hasText && !"Send Message".equals(text.toString())) return false;
+                if (hasDescription && !"Send Message".equals(description.toString())) return false;
+                sendNodes++;
+            }
+        }
+        for (int ci = 0; ci < node.getChildCount(); ci++) {
+            if (pending.size() >= 64) mqFail("send_parent_scan_incomplete");
+            AccessibilityNodeInfo child = node.getChild(ci);
+            if (child != null) pending.add(child);
+        }
+    }
+    return sendNodes == 1;
+}
+
+// Verified ChatGPT layout: the Send Message semantics child is not clickable;
+// its immediate clickable parent contains only that one labeled control.
+AccessibilityNodeInfo mqSendTapTarget(AccessibilityNodeInfo exact, String pkg) {
+    mqSendDiagnostic = new JSONObject();
+    JSONArray ancestors = new JSONArray();
+    mqSendDiagnostic.put("ancestors", ancestors);
+    if (!"com.openai.chatgpt".equals(pkg) || !exact.refresh() || !mqNodeMatches(exact, pkg, "label", "Send Message")) mqFail("send_control_stale");
+    AccessibilityNodeInfo candidate = exact;
+    for (int depth = 0; candidate != null && depth < 8; depth++) {
+        boolean refreshed = candidate.refresh();
+        JSONObject ancestor = new JSONObject();
+        Rect bounds = new Rect();
+        candidate.getBoundsInScreen(bounds);
+        CharSequence actualPackage = candidate.getPackageName();
+        CharSequence actualClass = candidate.getClassName();
+        ancestor.put("depth", depth);
+        ancestor.put("refreshed", refreshed);
+        ancestor.put("class", actualClass == null ? "" : actualClass.toString());
+        ancestor.put("package", actualPackage == null ? "" : actualPackage.toString());
+        ancestor.put("bounds", bounds.flattenToString());
+        ancestor.put("visible", candidate.isVisibleToUser());
+        ancestor.put("enabled", candidate.isEnabled());
+        ancestor.put("clickable", candidate.isClickable());
+        ancestor.put("editable", candidate.isEditable());
+        JSONArray ids = new JSONArray();
+        List actions = candidate.getActionList();
+        for (int ai = 0; ai < actions.size() && ai < 64; ai++) {
+            AccessibilityNodeInfo.AccessibilityAction action = (AccessibilityNodeInfo.AccessibilityAction) actions.get(ai);
+            ids.put(action.getId());
+        }
+        ancestor.put("actionIds", ids);
+        ancestor.put("actionsTruncated", actions.size() > 64);
+        ancestors.put(ancestor);
+        if (!refreshed) mqFail("send_parent_stale");
+        if (actualPackage != null && pkg.equals(actualPackage.toString()) && candidate.isVisibleToUser() && candidate.isEnabled() && candidate.isClickable() && !candidate.isEditable()) {
+            boolean isolated = mqContainsOnlySend(candidate, pkg);
+            ancestor.put("isolatedSend", isolated);
+            if (!isolated) mqFail("send_parent_not_isolated");
+            mqSendDiagnostic.put("ready", true);
+            return candidate;
+        }
+        candidate = candidate.getParent();
+    }
+    mqSendDiagnostic.put("ready", false);
+    mqFail("send_clickable_parent_not_identified");
+    return null;
+}
+
+// Readiness polling performs no UI action. Consume the Send attempt only after
+// a fresh isolated target exists; the eventual click still refreshes it again.
+void mqWaitForSendTarget(AccessibilityService service, String pkg) {
+    long deadline = SystemClock.elapsedRealtime() + 5000;
+    int checks = 0;
+    String lastReason = "send_control_missing";
+    while (true) {
+        mqRequireUnlocked();
+        checks++;
+        List match = mqOne(service, pkg, "label", "Send Message", 0);
+        if (match != null) {
+            AccessibilityWindowInfo window = (AccessibilityWindowInfo) match.get(1);
+            try {
+                mqSendTapTarget((AccessibilityNodeInfo) match.get(0), pkg);
+                mqSendDiagnostic.put("readinessChecks", checks);
+                mqSendDiagnostic.put("windowId", window.getId());
+                mqSendDiagnostic.put("layer", window.getLayer());
+                return;
+            } catch (IllegalStateException unavailable) {
+                String reason = unavailable.getMessage();
+                mqSendDiagnostic.put("readinessChecks", checks);
+                mqSendDiagnostic.put("windowId", window.getId());
+                mqSendDiagnostic.put("layer", window.getLayer());
+                mqSendDiagnostic.put("lastFailure", reason);
+                if (!"mq:send_clickable_parent_not_identified".equals(reason) && !"mq:send_control_stale".equals(reason) && !"mq:send_parent_stale".equals(reason)) throw unavailable;
+                lastReason = reason.substring(3);
+            }
+        } else {
+            mqSendDiagnostic.put("readinessChecks", checks);
+            mqSendDiagnostic.put("lastFailure", "mq:send_control_missing");
+            lastReason = "send_control_missing";
+        }
+        if (SystemClock.elapsedRealtime() >= deadline) {
+            mqSendDiagnostic.put("timedOut", true);
+            mqFail(lastReason);
+        }
+        SystemClock.sleep(200);
+    }
+}
+
+// Fresh lookup and refresh immediately before every gesture. No stored coordinates.
+void mqTap(AccessibilityService service, String pkg, String kind, String value) {
+    mqRequireUnlocked();
+    List match = mqOne(service, pkg, kind, value, 0);
+    if (match == null) mqFail("tap_target_missing");
+    AccessibilityNodeInfo node = (AccessibilityNodeInfo) match.get(0);
+    AccessibilityWindowInfo window = (AccessibilityWindowInfo) match.get(1);
+    if (!node.refresh() || !mqNodeMatches(node, pkg, kind, value)) mqFail("tap_target_stale");
+    boolean nativeFile = kind.equals("file");
+    boolean nativeSend = pkg.equals("com.openai.chatgpt") && kind.equals("label") && value.equals("Send Message");
+    if (nativeFile) node = mqFileTapTarget(node, pkg, value);
+    if (nativeSend) node = mqSendTapTarget(node, pkg);
+    Rect bounds = new Rect();
+    node.getBoundsInScreen(bounds);
+    if (bounds.isEmpty()) mqFail("tap_bounds_empty");
+    int x = bounds.centerX();
+    int y = bounds.centerY();
+    JSONObject tap = new JSONObject();
+    tap.put("package", pkg);
+    tap.put("selectorKind", kind);
+    tap.put("selectorValue", value);
+    tap.put("targetId", node.getViewIdResourceName() == null ? "" : node.getViewIdResourceName());
+    tap.put("windowId", window.getId());
+    tap.put("layer", window.getLayer());
+    tap.put("bounds", bounds.flattenToString());
+    tap.put("clickable", node.isClickable());
+    tap.put("method", nativeFile || nativeSend ? "accessibility_click" : "gesture");
+    tap.put("actionRole", nativeFile ? "file" : nativeSend ? "send" : "control");
+    tap.put("nativeActionReturned", JSONObject.NULL);
+    tap.put("gestureCompleted", false);
+    JSONArray actionIds = new JSONArray();
+    List actions = node.getActionList();
+    for (int ai = 0; ai < actions.size() && ai < 64; ai++) {
+        AccessibilityNodeInfo.AccessibilityAction action = (AccessibilityNodeInfo.AccessibilityAction) actions.get(ai);
+        actionIds.put(action.getId());
+    }
+    tap.put("actionIds", actionIds);
+    tap.put("actionsTruncated", actions.size() > 64);
+    mqTapAttempts.put(tap);
+    List windows = service.getWindows();
+    for (int i = 0; i < windows.size(); i++) {
+        AccessibilityWindowInfo other = (AccessibilityWindowInfo) windows.get(i);
+        if (other.getId() == window.getId() || other.getLayer() <= window.getLayer()) continue;
+        Rect overlay = new Rect();
+        other.getBoundsInScreen(overlay);
+        if (overlay.contains(x, y)) {
+            JSONObject target = new JSONObject();
+            target.put("package", pkg);
+            target.put("selectorKind", kind);
+            target.put("selectorValue", value);
+            target.put("windowId", window.getId());
+            target.put("layer", window.getLayer());
+            target.put("type", window.getType());
+            target.put("bounds", bounds.flattenToString());
+            JSONObject obstruction = new JSONObject();
+            obstruction.put("windowId", other.getId());
+            obstruction.put("layer", other.getLayer());
+            obstruction.put("type", other.getType());
+            obstruction.put("bounds", overlay.flattenToString());
+            obstruction.put("active", other.isActive());
+            obstruction.put("focused", other.isFocused());
+            AccessibilityNodeInfo obstructionRoot = other.getRoot();
+            CharSequence obstructionPackage = obstructionRoot == null ? null : obstructionRoot.getPackageName();
+            obstruction.put("rootPackage", obstructionPackage == null ? "" : obstructionPackage.toString());
+            mqTapDiagnostic.put("target", target);
+            mqTapDiagnostic.put("obstruction", obstruction);
+            // Diagnostic only: do not relax the blocking rule before device evidence.
+            mqFail("tap_target_occluded");
+        }
+    }
+    if (nativeFile || nativeSend) {
+        // These verified native targets accept ACTION_CLICK. Completed gestures
+        // were observed to leave their UI unchanged. Never fall back or retry.
+        boolean accepted = node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+        tap.put("nativeActionReturned", accepted);
+        if (!accepted) mqFail(nativeFile ? "picker_file_click_rejected" : "send_click_rejected");
+        return;
+    }
+    CountDownLatch finished = new CountDownLatch(1);
+    AtomicInteger outcome = new AtomicInteger(0);
+    callback = tasker.implementClass(AccessibilityService.GestureResultCallback.class, new ClassImplementation() {
+        run(Callable superCaller, String methodName, Object[] args) {
+            if (methodName.equals("onCompleted")) { outcome.set(1); finished.countDown(); return null; }
+            if (methodName.equals("onCancelled")) { outcome.set(-1); finished.countDown(); return null; }
+            return superCaller.call();
+        }
+    });
+    Path path = new Path();
+    path.moveTo((float) x, (float) y);
+    GestureDescription gesture = new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription(path, 0, 90)).build();
+    if (!service.dispatchGesture(gesture, callback, new Handler(Looper.getMainLooper()))) mqFail("gesture_rejected");
+    if (!finished.await(3, TimeUnit.SECONDS)) mqFail("gesture_callback_timeout");
+    if (outcome.get() != 1) mqFail("gesture_cancelled");
+    tap.put("gestureCompleted", true);
+}
+
+// Only anonymous Image-node signatures are retained; no message text or window title.
+// Focus direction uses the observed relative orb sizes within its own app window.
+// Missing/conflicting geometry never authorizes a toggle.
+JSONObject mqFocusModeEvidence(AccessibilityService service, String pkg) {
+    JSONObject evidence = new JSONObject();
+    evidence.put("classification", "unknown");
+    JSONArray transcriptControls = new JSONArray();
+    evidence.put("transcriptControls", transcriptControls);
+    List toggles = mqFind(service, pkg, "label", "toggle focus mode");
+    evidence.put("toggleMatches", toggles.size());
+    if (toggles.size() != 1) return evidence;
+    List match = (List) toggles.get(0);
+    AccessibilityNodeInfo orb = (AccessibilityNodeInfo) match.get(0);
+    AccessibilityWindowInfo window = (AccessibilityWindowInfo) match.get(1);
+    if (!orb.refresh() || !mqNodeMatches(orb, pkg, "label", "toggle focus mode")) return evidence;
+    Rect orbBounds = new Rect();
+    Rect windowBounds = new Rect();
+    orb.getBoundsInScreen(orbBounds);
+    window.getBoundsInScreen(windowBounds);
+    evidence.put("orbBounds", orbBounds.flattenToString());
+    evidence.put("windowBounds", windowBounds.flattenToString());
+    evidence.put("windowId", window.getId());
+    boolean sameWindowVoice = false;
+    List ends = mqFind(service, pkg, "label", "End");
+    for (int i = 0; i < ends.size(); i++) {
+        List voice = (List) ends.get(i);
+        if (((AccessibilityWindowInfo) voice.get(1)).getId() == window.getId()) sameWindowVoice = true;
+    }
+    evidence.put("sameWindowVoice", sameWindowVoice);
+    String[] controls = new String[] {"Copy", "Good response", "Bad response", "Read aloud"};
+    for (int ci = 0; ci < controls.length; ci++) {
+        List found = mqFind(service, pkg, "label", controls[ci]);
+        for (int fi = 0; fi < found.size(); fi++) {
+            List control = (List) found.get(fi);
+            if (((AccessibilityWindowInfo) control.get(1)).getId() == window.getId()) { transcriptControls.put(controls[ci]); break; }
+        }
+    }
+    int orbWidth = orbBounds.right - orbBounds.left;
+    int windowWidth = windowBounds.right - windowBounds.left;
+    boolean validGeometry = !orbBounds.isEmpty() && !windowBounds.isEmpty() && orbBounds.left >= windowBounds.left && orbBounds.top >= windowBounds.top && orbBounds.right <= windowBounds.right && orbBounds.bottom <= windowBounds.bottom;
+    if (!sameWindowVoice || !validGeometry || windowWidth <= 0) return evidence;
+    if (orbWidth * 2 < windowWidth) evidence.put("classification", "transcript_small_orb");
+    else if (transcriptControls.length() == 0) evidence.put("classification", "focused_large_orb");
+    else evidence.put("classification", "conflicting_large_orb_with_transcript_controls");
+    return evidence;
+}
+
+JSONArray mqImageSnapshot(AccessibilityService service, String pkg) {
+    List matches = mqFind(service, pkg, "label", "Image");
+    if (matches.size() > 32) mqFail("too_many_image_nodes");
+    mqImageDiagnostic = new JSONObject();
+    mqImageDiagnostic.put("acceptedMatches", matches.size());
+    if (matches.size() == 0) {
+        List diagnosticMatches = mqFind(service, pkg, "image_diagnostic", "Image");
+        JSONArray eligibility = new JSONArray();
+        for (int di = 0; di < diagnosticMatches.size() && di < 32; di++) {
+            List diagnosticMatch = (List) diagnosticMatches.get(di);
+            AccessibilityNodeInfo diagnosticNode = (AccessibilityNodeInfo) diagnosticMatch.get(0);
+            AccessibilityWindowInfo diagnosticWindow = (AccessibilityWindowInfo) diagnosticMatch.get(1);
+            Rect diagnosticBounds = new Rect();
+            diagnosticNode.getBoundsInScreen(diagnosticBounds);
+            JSONObject details = new JSONObject();
+            details.put("windowId", diagnosticWindow.getId());
+            details.put("bounds", diagnosticBounds.flattenToString());
+            details.put("visible", diagnosticNode.isVisibleToUser());
+            details.put("enabled", diagnosticNode.isEnabled());
+            eligibility.put(details);
+        }
+        mqImageDiagnostic.put("exactLabelMatches", diagnosticMatches.size());
+        mqImageDiagnostic.put("eligibility", eligibility);
+        mqImageDiagnostic.put("truncated", diagnosticMatches.size() > 32);
+    }
+    JSONArray images = new JSONArray();
+    for (int i = 0; i < matches.size(); i++) {
+        List match = (List) matches.get(i);
+        AccessibilityNodeInfo node = (AccessibilityNodeInfo) match.get(0);
+        AccessibilityWindowInfo window = (AccessibilityWindowInfo) match.get(1);
+        Rect bounds = new Rect();
+        node.getBoundsInScreen(bounds);
+        JSONObject image = new JSONObject();
+        image.put("windowId", window.getId());
+        image.put("bounds", bounds.flattenToString());
+        // UniqueId is available on the tested Android 16 phone (API 33+).
+        image.put("uniqueId", node.getUniqueId() == null ? "" : node.getUniqueId());
+        image.put("nodeHashCode", node.hashCode()); // Diagnostic only; never a confirmation identity.
+        images.put(image);
+    }
+    return images;
+}
+
+boolean mqNewImageEvidence(JSONArray before, JSONArray after) {
+    if (after.length() == 0) return false;
+    if (after.length() > before.length()) return true;
+    HashSet previous = new HashSet();
+    for (int i = 0; i < before.length(); i++) {
+        String identity = before.getJSONObject(i).optString("uniqueId", "");
+        if (identity.length() > 0) previous.add(identity);
+    }
+    // A changed screen position alone is not a new image: the keyboard/layout moves.
+    if (previous.size() == 0 || previous.size() != before.length()) return false;
+    for (int i = 0; i < after.length(); i++) {
+        String identity = after.getJSONObject(i).optString("uniqueId", "");
+        if (identity.length() > 0 && !previous.contains(identity)) return true;
+    }
+    return false;
+}
+
+boolean mqNetworkValidated() {
+    ConnectivityManager manager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+    if (manager == null) return false;
+    Network network = manager.getActiveNetwork();
+    if (network == null) return false;
+    NetworkCapabilities capabilities = manager.getNetworkCapabilities(network);
+    return capabilities != null && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+}
+
+void mqRequireUnlocked() {
+    KeyguardManager guard = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
+    if (guard == null || guard.isKeyguardLocked() || guard.isDeviceLocked()) mqFail("phone_locked");
+}
+
+void mqWaitForInternet() {
+    long deadline = SystemClock.elapsedRealtime() + 20000;
+    do {
+        mqRequireUnlocked();
+        if (mqNetworkValidated()) return;
+        if (SystemClock.elapsedRealtime() >= deadline) mqFail("internet_not_validated_before_prepare");
+        SystemClock.sleep(200);
+    } while (true);
+}
+
+// A completed UI submission is independent of whether voice can resume. Never
+// retry Send or create/navigate to another conversation during voice recovery.
+void mqResumeVoiceAfterSubmission(AccessibilityService service, String pkg, JSONObject result) {
+    result.put("voiceResumeAttempted", false);
+    result.put("voiceResumed", false);
+    try {
+        if (mqPresent(service, pkg, "End")) return;
+        if (!mqPresent(service, pkg, "Start a voice conversation")) mqFail("voice_resume_entry_missing");
+        mqRequireUnlocked();
+        if (!mqNetworkValidated()) mqFail("internet_not_validated_for_voice_resume");
+        result.put("voiceResumeAttempted", true);
+        mqTap(service, pkg, "label", "Start a voice conversation");
+        if (mqOne(service, pkg, "label", "End", 15000) == null) mqFail("voice_resume_not_observed");
+        result.put("voiceResumed", true);
+        result.put("voiceActiveAfter", true);
+        result.put("voiceNeedsResume", false);
+        result.put("voiceState", "active");
+    } catch (Throwable failure) {
+        String message = failure.getMessage();
+        result.put("voiceResumeError", message != null && message.startsWith("mq:") ? message.substring(3) : "voice_resume_exception");
+        result.put("voiceResumeErrorType", failure.getClass().getName());
+    }
+}
+
+boolean mqErrorVisible(AccessibilityService service, String pkg) {
+    // Exact English error/retry controls; this is a bounded UI check, not an API receipt.
+    String[] labels = new String[] {"Retry", "Try again", "Something went wrong", "Upload failed", "Network error", "Poor connection", "Unsent \u00b7 Retry", "Looks like some messages never sent. Retry?"};
+    // Multiple Retry controls are still an error; uniqueness applies to clicks,
+    // not to these read-only presence checks.
+    for (int i = 0; i < labels.length; i++) if (mqFind(service, pkg, "label", labels[i]).size() > 0) return true;
+    return false;
+}
+
+void mqFocusSearch(AccessibilityNodeInfo node) {
+    if (!node.refresh() || !node.isEditable()) mqFail("picker_search_input_stale");
+    if (!node.isFocused()) {
+        if (!node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)) mqFail("picker_search_focus_rejected");
+        long focusDeadline = SystemClock.elapsedRealtime() + 1500;
+        while (!node.isFocused() && SystemClock.elapsedRealtime() < focusDeadline) {
+            SystemClock.sleep(100);
+            if (!node.refresh()) mqFail("picker_search_input_stale");
+        }
+        if (!node.isFocused()) mqFail("picker_search_focus_not_observed");
+    }
+}
+
+// IDs/labels below were observed on the user's S25; no screen coordinates.
+void mqFindFile(AccessibilityService service, String pickerPackage, String fileName) {
+    if (mqOne(service, pickerPackage, "file", fileName, 1500) != null) return;
+    if (mqPresent(service, pickerPackage, "Show roots")) {
+        mqTap(service, pickerPackage, "label", "Show roots");
+        if (mqOne(service, pickerPackage, "label", "Images", 5000) == null) mqFail("picker_images_root_missing");
+        mqTap(service, pickerPackage, "label", "Images");
+    }
+    String searchId = mqConfigured("mq_picker_search_id", pickerPackage + ":id/option_menu_search");
+    String inputId = mqConfigured("mq_picker_input_id", pickerPackage + ":id/search_src_text");
+    if (!searchId.startsWith(pickerPackage + ":id/") || !inputId.startsWith(pickerPackage + ":id/")) mqFail("picker_search_ids_invalid");
+    mqTap(service, pickerPackage, "id", searchId);
+    List input = mqOne(service, pickerPackage, "id", inputId, 5000);
+    if (input == null) mqFail("picker_search_input_missing");
+    AccessibilityNodeInfo node = (AccessibilityNodeInfo) input.get(0);
+    if (!node.isEditable()) mqFail("picker_search_input_not_editable");
+    mqFocusSearch(node);
+    Bundle arguments = new Bundle();
+    arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, fileName);
+    if (!node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)) mqFail("picker_search_set_text_failed");
+    if (!node.refresh() || !node.isFocused()) mqFail("picker_search_focus_lost");
+    if (!node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.getId())) mqFail("picker_search_submit_not_supported");
+    if (mqOne(service, pickerPackage, "file", fileName, 12000) == null) mqFail("exact_file_not_visible");
+}
+
+// The fixed local diagnostic contains only our result/selector metadata, no app text.
+void mqWriteDiagnostic(JSONObject result) {
+    FileOutputStream stream = null;
+    try {
+        File destination = new File(Environment.getExternalStorageDirectory(), "Tasker/manfred-ui-worker.json");
+        stream = new FileOutputStream(destination, false);
+        stream.write(result.toString().getBytes("UTF-8"));
+    } catch (Exception failure) {
+        result.put("diagnosticWriteError", failure.getClass().getName());
+    } finally {
+        if (stream != null) {
+            try { stream.close(); }
+            catch (Exception failure) { result.put("diagnosticWriteError", failure.getClass().getName()); }
+        }
+    }
+}
+
+String stage = mqValue("mq_stage");
+String id = mqValue("mq_id");
+String owner = mqValue("mq_owner");
+String chatPackage = "com.openai.chatgpt";
+String pickerPackage = mqConfigured("mq_picker_package", "com.google.android.documentsui");
+long started = SystemClock.elapsedRealtime();
+boolean selectionAttempted = false;
+boolean sendAttempted = false;
+boolean voiceBefore = false;
+JSONObject ledger = null;
+JSONObject result = new JSONObject();
+mqTapDiagnostic = new JSONObject();
+mqTapAttempts = new JSONArray();
+mqSendDiagnostic = new JSONObject();
+mqImageDiagnostic = new JSONObject();
+result.put("version", 1);
+result.put("stage", stage);
+result.put("id", id);
+result.put("owner", owner);
+result.put("status", "no_op");
+result.put("reason", "stage_gate_not_authorized");
+result.put("step", "gate");
+result.put("voiceActiveBefore", false);
+result.put("initialPopupDismissed", false);
+result.put("voiceActiveAfter", JSONObject.NULL);
+result.put("voiceActiveAfterSubmission", JSONObject.NULL);
+result.put("voiceResumeAttempted", false);
+result.put("voiceResumed", false);
+result.put("voiceNeedsResume", JSONObject.NULL);
+result.put("voiceContinuity", "unverified");
+result.put("submissionObserved", false);
+result.put("selectionGestureCompleted", false);
+result.put("selectionActionCompleted", false);
+result.put("selectionMethod", "none");
+result.put("sendGestureCompleted", false);
+result.put("sendActionCompleted", false);
+result.put("sendMethod", "none");
+result.put("networkValidated", false);
+result.put("errorUiObserved", false);
+result.put("uploadInProgress", false);
+result.put("uploadObserved", false);
+result.put("focusModeToggleAttempted", false);
+result.put("focusModeToggleCompleted", false);
+result.put("focusModeNormalized", false);
+result.put("focusedModeClassification", "unknown");
+result.put("newImageObserved", false);
+result.put("voiceState", "unknown");
+result.put("confirmationMode", "UI observation; no server receipt");
+
+try {
+    boolean prepareGate = stage.equals("prepare") && mqValue("mq_ok").equals("1") && mqValue("mq_status").equals("claimed");
+    boolean attachGate = stage.equals("attach_send") && mqValue("mq_ok").equals("1") && mqValue("mq_status").equals("send_permitted");
+    if (prepareGate || attachGate) {
+        result.put("status", "error");
+        if (Looper.myLooper() == Looper.getMainLooper()) mqFail("java_action_must_run_off_main_thread");
+        if (!pickerPackage.equals("com.google.android.documentsui") && !pickerPackage.equals("com.android.documentsui")) mqFail("picker_package_unconfigured");
+        result.put("step", "verify_receipt");
+        JSONObject image = mqOwnedImage(id, owner, prepareGate ? "claimed" : "sending");
+        result.put("step", "verify_content");
+        mqVerifyImage(image);
+        result.put("step", "accessibility");
+        AccessibilityService service = tasker.getAccessibilityService();
+        if (service == null) mqFail("tasker_accessibility_not_running");
+        AccessibilityServiceInfo info = service.getServiceInfo();
+        if ((info.flags & AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS) == 0 || (info.getCapabilities() & AccessibilityServiceInfo.CAPABILITY_CAN_RETRIEVE_WINDOW_CONTENT) == 0 || (info.getCapabilities() & AccessibilityServiceInfo.CAPABILITY_CAN_PERFORM_GESTURES) == 0) mqFail("accessibility_capability_missing");
+        ledger = mqLedgerRead();
+        String fileName = image.getString("fileName");
+        if (prepareGate) {
+            result.put("step", "prepare_voice");
+            if (id.equals(ledger.optString("id", "")) && owner.equals(ledger.optString("owner", ""))) mqFail("worker_already_started");
+            ledger = new JSONObject();
+            ledger.put("version", 1);
+            ledger.put("id", id);
+            ledger.put("owner", owner);
+            ledger.put("sha256", image.getString("sha256"));
+            ledger.put("fileName", fileName);
+            ledger.put("uri", image.getString("uri"));
+            mqLedgerWrite(ledger, "preparing");
+            result.put("step", "await_internet");
+            mqWaitForInternet();
+            if (mqPresent(service, chatPackage, "Remove")) mqFail("existing_attachment_draft");
+            result.put("step", "normalize_attachment_popup");
+            result.put("initialPopupDismissed", mqDismissInitialAttachmentPopup(service, chatPackage));
+            result.put("step", "prepare_voice");
+            voiceBefore = mqPresent(service, chatPackage, "End");
+            if (!voiceBefore) {
+                if (mqOne(service, chatPackage, "label", "Start a voice conversation", 5000) == null) mqFail("voice_entry_not_found");
+                mqTap(service, chatPackage, "label", "Start a voice conversation");
+                if (mqOne(service, chatPackage, "label", "End", 15000) == null) mqFail("voice_start_not_observed");
+            }
+            result.put("voiceActiveBefore", voiceBefore);
+            ledger.put("voiceActiveBefore", voiceBefore);
+            if (mqPresent(service, chatPackage, "Remove")) mqFail("existing_attachment_draft");
+            if (mqOne(service, chatPackage, "label", "Attachment", 5000) == null) mqFail("attachment_button_missing");
+            result.put("step", "attachment_menu");
+            mqTap(service, chatPackage, "label", "Attachment");
+            if (mqOne(service, chatPackage, "label", "Files", 5000) == null) mqFail("files_popup_missing");
+            result.put("step", "files_menu");
+            mqTap(service, chatPackage, "label", "Files");
+            // ChatGPT may first show its own chooser before Android DocumentsUI.
+            long chooserDeadline = SystemClock.elapsedRealtime() + 8000;
+            boolean chooserReady = false;
+            while (SystemClock.elapsedRealtime() < chooserDeadline) {
+                if (mqOne(service, pickerPackage, "file", fileName, 0) != null) { chooserReady = true; break; }
+                if (mqPresent(service, chatPackage, "Upload files")) {
+                    mqTap(service, chatPackage, "label", "Upload files");
+                    chooserReady = true;
+                    break;
+                }
+                // A configured DocumentsUI Search control proves the picker is present.
+                String searchId = mqConfigured("mq_picker_search_id", pickerPackage + ":id/option_menu_search");
+                if (mqOne(service, pickerPackage, "id", searchId, 0) != null || mqPresent(service, pickerPackage, "Show roots")) { chooserReady = true; break; }
+                SystemClock.sleep(200);
+            }
+            if (!chooserReady) mqFail("documents_picker_not_observed");
+            result.put("step", "exact_file_search");
+            mqFindFile(service, pickerPackage, fileName);
+            // No selection occurs in prepare. Recheck current receipt ownership.
+            mqOwnedImage(id, owner, "claimed");
+            mqLedgerWrite(ledger, "prepared");
+            result.put("step", "prepared");
+            result.put("status", "prepared");
+            result.put("reason", "exact_file_visible_not_selected");
+        } else {
+            result.put("step", "revalidate_prepared");
+            if (ledger.optInt("version", 0) != 1 || !id.equals(ledger.optString("id", "")) || !owner.equals(ledger.optString("owner", "")) || !"prepared".equals(ledger.optString("phase", "")) || !image.getString("sha256").equals(ledger.optString("sha256", "")) || !fileName.equals(ledger.optString("fileName", "")) || !image.getString("uri").equals(ledger.optString("uri", ""))) mqFail("prepared_worker_stamp_missing");
+            long stampAge = SystemClock.elapsedRealtime() - ledger.getLong("updatedElapsedMs");
+            if (stampAge < 0 || stampAge > 90000) mqFail("prepared_worker_stamp_expired");
+            voiceBefore = ledger.optBoolean("voiceActiveBefore", false);
+            result.put("voiceActiveBefore", voiceBefore);
+            if (mqOne(service, pickerPackage, "file", fileName, 0) == null) mqFail("exact_file_no_longer_visible");
+            // The native receipt can precede AP shutdown. Recheck immediately
+            // before any selection; a failed check has not consumed the local permit.
+            mqRequireUnlocked();
+            if (!mqNetworkValidated()) mqFail("internet_not_validated_before_selection");
+            // Consume both a local permit and durable phase before the first possible upload.
+            mqOwnedImage(id, owner, "sending");
+            tasker.setVariable("mq_status", "ui_permit_consumed");
+            if (!mqValue("mq_status").equals("ui_permit_consumed")) mqFail("local_permit_consume_failed");
+            mqLedgerWrite(ledger, "selection_attempted");
+            selectionAttempted = true;
+            result.put("step", "select_exact_file");
+            result.put("selectionMethod", "accessibility_click");
+            mqTap(service, pickerPackage, "file", fileName);
+            result.put("selectionActionCompleted", true);
+            result.put("step", "await_attachment_preview");
+            long previewDeadline = SystemClock.elapsedRealtime() + 20000;
+            boolean previewReady = false;
+            while (SystemClock.elapsedRealtime() < previewDeadline) {
+                if (mqPresent(service, chatPackage, "Remove") && mqPresent(service, chatPackage, "Send Message")) { previewReady = true; break; }
+                SystemClock.sleep(200);
+            }
+            if (!previewReady) mqFail("attachment_preview_not_observed");
+            result.put("step", "await_send_target");
+            mqWaitForSendTarget(service, chatPackage);
+            mqOwnedImage(id, owner, "sending");
+            if (!mqNetworkValidated()) mqFail("internet_not_validated_before_send");
+            JSONArray imagesBeforeSend = mqImageSnapshot(service, chatPackage);
+            result.put("imagesBeforeSend", imagesBeforeSend);
+            mqLedgerWrite(ledger, "send_attempted");
+            sendAttempted = true;
+            result.put("step", "send_once");
+            result.put("sendMethod", "accessibility_click");
+            mqTap(service, chatPackage, "label", "Send Message");
+            result.put("sendActionCompleted", true);
+            result.put("step", "observe_submission");
+            long submittedDeadline = SystemClock.elapsedRealtime() + 15000;
+            int stable = 0;
+            while (SystemClock.elapsedRealtime() < submittedDeadline) {
+                boolean end = mqPresent(service, chatPackage, "End");
+                boolean start = mqPresent(service, chatPackage, "Start a voice conversation");
+                boolean remove = mqPresent(service, chatPackage, "Remove");
+                boolean send = mqPresent(service, chatPackage, "Send Message");
+                if (!remove && !send && (end || start)) stable++; else stable = 0;
+                if (stable >= 3) {
+                    result.put("submissionObserved", true);
+                    result.put("voiceActiveAfter", end);
+                    result.put("voiceActiveAfterSubmission", end);
+                    result.put("voiceNeedsResume", !end && start);
+                    result.put("voiceState", end ? "active" : start ? "inactive" : "unknown");
+                    JSONArray imagesAfterSend = mqImageSnapshot(service, chatPackage);
+                    if (end && imagesAfterSend.length() == 0 && !result.getBoolean("focusModeToggleAttempted")) {
+                        JSONObject focusEvidence = mqFocusModeEvidence(service, chatPackage);
+                        result.put("focusModeEvidence", focusEvidence);
+                        result.put("focusedModeClassification", focusEvidence.getString("classification"));
+                        if ("focused_large_orb".equals(focusEvidence.getString("classification"))) {
+                            // Only the verified large focused orb may reveal the
+                            // transcript. A small orb already represents transcript mode.
+                            result.put("step", "reveal_upload_status");
+                            result.put("focusModeToggleAttempted", true);
+                            mqTap(service, chatPackage, "label", "toggle focus mode");
+                            result.put("focusModeToggleCompleted", true);
+                            stable = 0;
+                            continue;
+                        }
+                    }
+                    result.put("imagesAfterSend", imagesAfterSend);
+                    result.put("newImageObserved", mqNewImageEvidence(imagesBeforeSend, imagesAfterSend));
+                    result.put("networkValidated", mqNetworkValidated());
+                    boolean uploading = mqFind(service, chatPackage, "label", "Uploading attachment").size() > 0;
+                    boolean errorVisible = mqErrorVisible(service, chatPackage);
+                    result.put("uploadInProgress", uploading);
+                    if (uploading) result.put("uploadObserved", true);
+                    result.put("errorUiObserved", errorVisible);
+                    result.put("focusModeNormalized", result.getBoolean("focusModeToggleCompleted") && end && imagesAfterSend.length() > 0);
+                    mqLedgerWrite(ledger, "submission_observed");
+                    // Keep observing a pending upload within this bounded window.
+                    // A visible error holds immediately and never clicks Retry.
+                    if (errorVisible || (!uploading && result.getBoolean("newImageObserved") && result.getBoolean("networkValidated"))) break;
+                }
+                SystemClock.sleep(250);
+            }
+            // Enable only after the supervised phone acceptance test validates this
+            // UI predicate. This confirms UI submission, never a server/audio receipt.
+            boolean verifiedUiPredicate = result.getBoolean("submissionObserved") && result.getBoolean("newImageObserved") && result.getBoolean("networkValidated") && !result.getBoolean("errorUiObserved") && !result.getBoolean("uploadInProgress");
+            boolean confirmationEnabled = mqValue("ManfredEyevueUiConfirmed").equals("verified_on_device_v1");
+            result.put("confirmationEnabled", confirmationEnabled);
+            result.put("status", verifiedUiPredicate && confirmationEnabled ? "send_confirmed" : "ambiguous");
+            result.put("reason", verifiedUiPredicate && confirmationEnabled ? "ui_confirmed_submission_no_server_receipt" : result.getBoolean("errorUiObserved") ? "upload_error_observed" : result.getBoolean("uploadInProgress") ? "upload_in_progress" : result.getBoolean("submissionObserved") ? "submission_observed_confirmation_unverified" : "send_acceptance_not_observed");
+            if (verifiedUiPredicate && confirmationEnabled) {
+                mqLedgerWrite(ledger, "ui_confirmed");
+                if (result.optBoolean("voiceNeedsResume", false)) {
+                    result.put("step", "resume_current_voice");
+                    mqResumeVoiceAfterSubmission(service, chatPackage, result);
+                }
+            }
+        }
+    }
+} catch (Throwable failure) {
+    result.put("status", selectionAttempted ? "ambiguous" : "error");
+    String message = failure.getMessage();
+    result.put("reason", message != null && message.startsWith("mq:") ? message.substring(3) : "worker_exception");
+    result.put("errorType", failure.getClass().getName());
+}
+result.put("selectionAttempted", selectionAttempted);
+result.put("sendAttempted", sendAttempted);
+result.put("elapsedMs", SystemClock.elapsedRealtime() - started);
+if (mqTapDiagnostic.length() > 0) result.put("tapBlock", mqTapDiagnostic);
+result.put("tapAttempts", mqTapAttempts);
+if (mqSendDiagnostic.length() > 0) result.put("sendTarget", mqSendDiagnostic);
+if (mqImageDiagnostic.length() > 0) result.put("imageLocatorDiagnostic", mqImageDiagnostic);
+mqWriteDiagnostic(result);
+tasker.setVariable("mq_ui_result", result.toString());
+return result.toString();
