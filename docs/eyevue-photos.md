@@ -6,9 +6,9 @@ The measured captures below used **0.5.2+10**, source [`212f98b`](https://github
 
 Hardware identity, measured resolutions, firmware boundaries, and protocol evidence are recorded in the [EyeVue E09-family / TK8 hardware profile](hardware/eyevue-e09.md).
 
-## Planned 0.5.4+12 photo-source choice
+## 0.5.4+12 photo-source choice
 
-The next version adds a remembered choice between **Instant BLE preview** and **Wi-Fi original**. This describes the settled implementation scope; the new Manfred build and its phone acceptance are still pending. The installed-build results below remain those of 0.5.3+11.
+Installed **0.5.4+12** adds a remembered choice between **Instant BLE preview** and **Wi-Fi original**. Two Manfred BLE captures saved in **3.381 and3.250 seconds**. The first exact image was independently visible in ChatGPT Live, but its Tasker record is held because automatic confirmation failed; the later image is queued. See the [current handoff](handoff-2026-09-06.md) before retrying anything. Historical Wi-Fi results below remain labeled by build.
 
 | Source | How to trigger it | Evidence and tradeoff |
 | --- | --- | --- |
@@ -17,7 +17,7 @@ The next version adds a remembered choice between **Instant BLE preview** and **
 
 The physical shutter does not provide the proven BLE-preview stream. BLE mode will not silently take a second picture after a glasses-button event; choose Wi-Fi original when using that button. The source choice remains separate from the Wi-Fi session's experimental startup options.
 
-Both sources keep the existing successful-save/gallery-URI/Tasker-receipt contract, with optional `imageSource` metadata identifying the source. The existing controlled-replay Tasker results remain valid, but a newly captured BLE preview through Manfred and ChatGPT still needs its own test. See [pinned BLE evidence and protocol boundaries](hardware/eyevue-e09.md#ble-preview-versus-wi-fi-original).
+Both sources keep the existing successful-save/gallery-URI/Tasker-receipt contract, with optional `imageSource` metadata identifying the source. The existing controlled-replay Tasker results remain valid, and the new BLE test demonstrated capture/save/display but exposed a focused-Live confirmation issue; automatic completion remains unfinished. See [pinned BLE evidence and protocol boundaries](hardware/eyevue-e09.md#ble-preview-versus-wi-fi-original).
 
 ## First supervised Wi-Fi-original session
 
