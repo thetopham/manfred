@@ -1,0 +1,42 @@
+name: Manfred Tasker
+
+on:
+  pull_request:
+    paths:
+      - 'integrations/tasker/**'
+      - '.github/workflows/tasker.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'integrations/tasker/**'
+      - '.github/workflows/tasker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: manfred-tasker-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tasker-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Queue, recovery, worker-flow, and confirmation tests
+        run: node --test integrations/tasker/*.test.js
+      - name: Portable project and recovery generator tests
+        working-directory: integrations/tasker
+        run: python -m unittest -v test_debug_retry test_maintenance_project test_receipt_project test_tasker_bundle test_worker_project
+      # test_ui_worker.py needs a separately provisioned BeanShell/JRE cache.
+      # This job does not claim Java-runtime, Android, or physical-device coverage.

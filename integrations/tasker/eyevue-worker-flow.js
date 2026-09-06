@@ -23,13 +23,30 @@
         }
         return { op: "hold", reason: reason(value, "preparation_unconfirmed") };
     }
+    // Recheck the worker's positive evidence at the queue boundary. A status
+    // string alone is not an acknowledgement, and missing flags are unknown.
+    function stableSubmission(value) {
+        return value && value.status === "send_confirmed" &&
+            value.selectionAttempted === true && value.sendAttempted === true &&
+            value.selectionActionCompleted === true && value.sendActionCompleted === true &&
+            value.submissionObserved === true && value.newImageObserved === true &&
+            value.networkValidated === true && value.confirmationEnabled === true &&
+            value.errorUiObserved === false && value.uploadInProgress === false &&
+            value.focusModeToggleAttempted === false && value.focusModeToggleCompleted === false;
+    }
     function afterAttach(raw, id, owner) {
         var value = result(raw, "attach_send", id, owner);
         var decision = { op: "hold", confirmed: false,
             reason: reason(value, "attachment_unconfirmed") };
-        if (value && value.status === "send_confirmed" &&
-            value.selectionAttempted === true && value.sendAttempted === true) {
+        if (stableSubmission(value)) {
             decision = { op: "complete", confirmed: true, reason: "submission_observed" };
+        } else if (value && value.status === "send_confirmed") {
+            // Revealing a transcript after Send can expose OLD Image nodes.
+            // Until both snapshots share a verified presentation, fail closed;
+            // never turn this ambiguity into another selection or Send attempt.
+            decision.reason = value.focusModeToggleAttempted === true ||
+                value.focusModeToggleCompleted === true ?
+                "confirmation_view_changed" : "confirmation_evidence_incomplete";
         }
         // Observed voice state is independent of whether image confirmation is
         // enabled. Missing or identity-invalid evidence is unknown, not false.

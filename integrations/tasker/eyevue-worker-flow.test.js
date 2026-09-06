@@ -9,6 +9,13 @@ function ui(changes = {}) {
     return JSON.stringify({ version: 1, stage: "prepare", status: "prepared", id, owner,
         selectionAttempted: false, sendAttempted: false, ...changes });
 }
+function confirmed(changes = {}) {
+    return { stage:"attach_send", status:"send_confirmed", selectionAttempted:true, sendAttempted:true,
+        selectionActionCompleted:true, sendActionCompleted:true, submissionObserved:true,
+        newImageObserved:true, networkValidated:true, confirmationEnabled:true,
+        errorUiObserved:false, uploadInProgress:false, focusModeToggleAttempted:false,
+        focusModeToggleCompleted:false, ...changes };
+}
 test("only matching preparation without content submission permits begin_send", () => {
     assert.equal(flow.afterPrepare(ui(), id, owner).op, "begin_send");
     for (const raw of ["%mq_ui_result", "", "{}", ui({id:"wrong"}), ui({owner:"wrong"}),
@@ -18,7 +25,7 @@ test("only matching preparation without content submission permits begin_send", 
     }
 });
 test("confirmed send requires stage identity and actual selection/send attempt flags", () => {
-    const good = { stage:"attach_send", status:"send_confirmed", selectionAttempted:true, sendAttempted:true };
+    const good = confirmed();
     assert.equal(flow.afterAttach(ui(good), id, owner).op, "complete");
     for (const change of [{id:"wrong"},{owner:"wrong"},{stage:"prepare"},{version:0},
         {selectionAttempted:false},{sendAttempted:false},{status:"ambiguous"},
@@ -27,8 +34,7 @@ test("confirmed send requires stage identity and actual selection/send attempt f
     }
 });
 test("voice needing resume does not authorize resending an already accepted photo", () => {
-    const decision = flow.afterAttach(ui({stage:"attach_send",status:"send_confirmed",
-        selectionAttempted:true,sendAttempted:true,voiceNeedsResume:true,voiceActiveAfter:false}), id, owner);
+    const decision = flow.afterAttach(ui(confirmed({voiceNeedsResume:true,voiceActiveAfter:false})), id, owner);
     assert.equal(decision.op, "complete");
     assert.equal(decision.voiceNeedsResume, true);
     assert.equal(decision.voiceActiveAfter, false);
