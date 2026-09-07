@@ -1,5 +1,7 @@
 # EyeVue photos in Manfred Companion
 
+Current implementation: [physical button to BLE preview](eyevue-ble-button.md) adds a second-exposure BLE bridge after the ordinary glasses photo completes. Start the BLE session in Manfred and enable Tasker before switching to ChatGPT. Historical installed-build results below predate this change; complete physical-button delivery still needs device acceptance.
+
 Manfred Companion adds a focused Android EyeVue photo component alongside the existing Omi audio bridge, targeting the tested TK8 glasses profile. Installed **0.5.3+11** defaults to **Capture and fetch (experimental)** and adds optional **Improve Wi-Fi discovery**. Source [`d513944`](https://github.com/thetopham/manfred/commit/d513944fabe8cfcdfe2c1f4db3417b0c122c8adb) passed **58 Flutter and 99 native tests**; one supervised baseline join improved to **7.712 seconds**, but the following photo rejoin failed. Reliable faster photo delivery remains **unverified**.
 
 The measured captures below used **0.5.2+10**, source [`212f98b`](https://github.com/thetopham/manfred/commit/212f98ba4f5f4d8ae110c034f2dca6f7965f9d73), which passed 49 Flutter and 84 native tests with stable signing verified in [Manfred run 33992980630](https://github.com/thetopham/manfred/actions/runs/33992980630). Two supervised cycles saved new **3200x2400** originals without historical duplicates and returned to Ready. Capture-event-to-save times were **36.650 seconds** and **29.781 seconds**, dominated by Wi-Fi discovery; immediate delivery and background operation remain unverified.

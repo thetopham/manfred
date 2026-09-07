@@ -88,7 +88,7 @@ class EyevuePlugin(
     private var captureMode = false
     private var blePreviewMode = false
     private var sessionStartup: String? = null
-    private var blePreviewRequests: kotlinx.coroutines.channels.Channel<Long>? = null
+    private var blePreviewSession: EyevueBlePreviewSession? = null
     private var captureGate: EyevueCaptureCycleGate? = null
     private var captureReceipt: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     private var captureDeadlineJob: Job? = null
@@ -541,36 +541,32 @@ class EyevuePlugin(
     }
 
 
-    /** App-triggered AA15 previews only: no AP command, network request, or physical-event loop. */
+    /** Physical-button and app previews share one owner; this path never opens Wi-Fi. */
     private suspend fun runBlePreviewSession(id: String) {
-        val requests = kotlinx.coroutines.channels.Channel<Long>(1)
         val capture = EyevueBlePreviewCapture(gatt.photoResults, gatt::write, gatt::resetPhotoTransfer)
         val store = EyevuePhotoStore(context)
-        blePreviewRequests = requests
-        try {
-            while (true) {
-                currentCoroutineContext().ensureActive()
-                ready = true
-                status = "Ready - use Take preview for a BLE image (typically 320x180)"
-                emitState()
-                val detectedAt = requests.receive()
-                ready = false
-                status = "Taking and receiving the BLE preview"
-                capturePhase("ble_preview_requested")
-                emitState()
-                val bytes = capture.capture()
-                currentCoroutineContext().ensureActive()
-                capturePhase("ble_preview_received")
-                status = "Saving the BLE preview"
-                emitState()
+        val owned = EyevueBlePreviewSession(
+            frames = gatt.frames,
+            write = gatt::write,
+            capture = capture::capture,
+            publish = { bytes, detectedAt ->
                 store.saveBlePreview(bytes, id, detectedAt) { image ->
                     latestImage = image
                     broadcastImageReady(image)
                     sink?.success(linkedMapOf<String, Any?>("type" to "imageReady").apply { putAll(image) })
                     emitState()
                 }
-                capturePhase("ble_preview_saved")
-            }
+            },
+            onStatus = { message, isReady ->
+                status = message
+                ready = isReady
+                emitState()
+            },
+            onPhase = ::capturePhase,
+        )
+        blePreviewSession = owned
+        try {
+            owned.run()
         } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
             sessionFailure = "The glasses did not return a BLE preview within 12 seconds"
         } catch (cancelled: CancellationException) {
@@ -582,8 +578,7 @@ class EyevuePlugin(
             // The owned capture drains any accepted AA13 write before reaching
             // here. No media-mode finish command is appropriate for this BLE path.
             ready = false
-            requests.close()
-            blePreviewRequests = null
+            if (blePreviewSession === owned) blePreviewSession = null
             gatt.resetPhotoTransfer()
             blePreviewMode = false
             sessionActive = false
@@ -596,12 +591,9 @@ class EyevuePlugin(
 
     private fun captureBlePreview() {
         check(sessionActive && blePreviewMode && ready) { "Wait until the BLE preview session is ready" }
-        val requests = blePreviewRequests ?: throw IOException("The BLE preview session is unavailable")
-        ready = false
+        val owned = blePreviewSession ?: throw IOException("The BLE preview session is unavailable")
         error = null
-        status = "Requesting a BLE preview"
-        check(requests.trySend(System.currentTimeMillis()).isSuccess) { "A BLE preview request is already pending" }
-        emitState()
+        check(owned.requestPreview()) { "A BLE preview request is already pending" }
     }
 
     /** Keep one logical session while closing Wi-Fi around every shutter. */

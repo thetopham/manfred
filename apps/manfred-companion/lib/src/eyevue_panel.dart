@@ -61,8 +61,9 @@ class _EyevuePanelState extends State<EyevuePanel> {
                   Text(
                     state.usesBlePreview
                         ? 'Get a small preview over Bluetooth without changing the phone’s Wi-Fi. '
-                            'Start a session, then use Take preview in this app. '
-                            'For the glasses shutter, choose Wi-Fi before starting the session.'
+                            'Start a session, then press the glasses shutter or use Take preview. '
+                            'The glasses button first saves its normal photo; Manfred then takes a second, '
+                            'fresh BLE preview. Keep looking at the scene until the preview is saved.'
                         : 'Fetch full-resolution originals over the glasses’ Wi-Fi. '
                             'Start a session before using the glasses shutter or Take photo. '
                             'Wi-Fi connections can take around 30 seconds or fail.',

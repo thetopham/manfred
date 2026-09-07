@@ -261,6 +261,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(settings.source, 'ble_preview');
     expect(find.text('Take preview'), findsOneWidget);
+    expect(find.textContaining('Manfred then takes a second'), findsOneWidget);
+    expect(find.textContaining('press the glasses shutter or use Take preview'), findsOneWidget);
     expect(find.text('Improve Wi-Fi discovery'), findsNothing);
     expect(find.text('Wi-Fi connection options'), findsNothing);
     bridge.emitState(<String, Object?>{
