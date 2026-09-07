@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the portable Manfred 0.5.3 Tasker test bundle from approved authored schemas."""
+"""Build the portable Manfred EyeVue Tasker test bundle from approved authored schemas."""
 from __future__ import annotations
 
 import argparse
@@ -17,7 +17,7 @@ HERE=Path(__file__).resolve().parent
 TEMPLATE_SHA256="d5830a2075330123fc272da10698c6bcf446c2f254a3d77959a3bffc9a311ce6"
 LEGACY_AUTHORED_TEMPLATE_SHA256="43c68ecca382a498489df3b541ad05135702ed099d005d3aa7ec46a8ca875789"
 JAVA_PATH="/sdcard/Tasker/Manfred/eyevue-ui-worker.java.txt"
-BUNDLE_NAME="Tasker-Manfred-0.5.3-test.zip"
+BUNDLE_NAME="Tasker-Manfred-test.zip"
 
 
 def xml_bytes(root):
@@ -29,12 +29,12 @@ def xml_bytes(root):
 def install_readme(worker_sha):
     return f"""# Manfred EyeVue → ChatGPT Tasker test bundle
 
-Experimental integration for Manfred 0.5.3, tested during development on Android 16 / Tasker 6.6.20. This is a supervised test package, not a guarantee of unattended image delivery or uninterrupted voice audio. It operates the currently open ChatGPT conversation and does not create a new chat.
+Experimental integration for Manfred EyeVue image receipts, including BLE previews and Wi-Fi originals, using the Android 16 / Tasker 6.6.20 interface. This revision requires supervised phone acceptance before unattended use. It operates the currently open ChatGPT conversation and does not create a new chat; continuous voice audio is unverified.
 
-1. Extract the archive. Copy its **Tasker** folder into the phone's internal-storage root, producing /sdcard/Tasker/Manfred/receipt.js and /sdcard/Tasker/Manfred/eyevue-ui-worker.java.txt. Keep both files together. Give Tasker access to these scripts and its diagnostic files; enable Tasker's accessibility service for the UI worker.
+1. For an existing installation, disable Manfred Photo Receipt and stop Manfred Photo Worker and Manfred Photo Dispatch before updating. Preserve the queue, UI ledger, completion switch and existing projects; resolve historical held records separately using exact ownership and reviewed evidence. Extract the archive. Copy its **Tasker** folder into the phone's internal-storage root, producing /sdcard/Tasker/Manfred/receipt.js and /sdcard/Tasker/Manfred/eyevue-ui-worker.java.txt. Keep both files together. Give Tasker access to these scripts and its diagnostic files; enable Tasker's accessibility service for the UI worker.
 2. Import **Manfred_ChatGPT_Worker.prj.xml**, then **Manfred_Photo_Queue.prj.xml** in Tasker. Keep the receipt profile disabled while checking setup. Inspect the imported tasks: Manfred Photo Worker has **12 actions**, Manfred Photo Dispatch has **1**, and Manfred Photo Receipt has **1**. The generators preserve Tasker 6.6.20's required sr-before-ve export ordering.
 3. Set Manfred Photo Receipt collision handling to **Run Both Together**. Keep the worker and dispatcher at the default **Abort New Task**. The projects use profile/task 40, worker task 50 and dispatcher task 51; check names before replacing an existing project. The receipt action already embeds the supplied inline loader; do not replace it with a bare eval-only call.
-4. Leave **%ManfredEyevueUiConfirmed unset** for the first supervised run. Enable the receipt profile, use Manfred's EyeVue capture-and-fetch flow, and keep the intended existing ChatGPT conversation available. A completed native JPEG event provides the actual URI permission and metadata. Verify the exact image, selection, submission/reply and voice state on the phone. The queue deliberately holds an uncertain result; do not clear it or resend automatically.
+4. On a new installation, leave **%ManfredEyevueUiConfirmed unset** for the first supervised run. Keep the phone unlocked and the intended existing ChatGPT Live conversation available. Ensure its transcript has a completed response with visible response controls; an empty transcript is unsupported by this revision. Enable the receipt profile and start Manfred's Instant BLE preview session. Use Take preview in the app, or the physical glasses button on a build supporting that trigger. A preview requested after the physical shutter is a separate exposure. Wi-Fi originals use the same image-receipt pipeline. A completed native JPEG event provides the actual URI permission and metadata. Verify the exact image, selection, submission/reply and voice state on the phone. The queue holds uncertain results; do not clear it or resend automatically.
 5. After a verified installed-UI acceptance test, the completion switch may be set explicitly to **verified_on_device_v1**. This enables only the worker's full UI-evidence predicate; it is not a server receipt or a promise of voice continuity. A changed UI, connection failure or insufficient evidence still holds the item. To stop future receipts, disable Manfred Photo Receipt; stop an already running worker separately in Tasker.
 
 The Java actions use the tested source("/sdcard/Tasker/Manfred/eyevue-ui-worker.java.txt") path. The receipt loader explicitly imports intent locals, including Tasker's sha[255] checksum array element. Production receipts write a JSON diagnostic without a Flash that could obscure controls.
@@ -43,7 +43,9 @@ Local diagnostics are under Tasker/: manfred-receipt.json, manfred-worker.json, 
 
 This archive includes only portable project schemas and source code. It contains no queue export, personal test IDs, photo metadata, images, credentials or recovery scripts. Importing it does not clear an existing queue or change the completion switch. Native receipt, background networking, upload and ongoing voice still need end-to-end device acceptance.
 
-The pinned worker passed the full BeanShell parser and 46 mock-runtime tests. It waits up to five seconds for a ready isolated Send control and observes for positive new-image evidence within the existing bounded window. A visible old image alone cannot complete the queue. A supervised controlled-photo replay verified automatic native file selection and Send, the full positive new-image/network/no-error predicate, a new reply and visible Live End state. Fresh glasses capture through this Tasker flow and uninterrupted voice audio remain unverified. A subsequent supervised controlled replay completed automatically as send_confirmed and queue sent; replaying the identical event returned duplicate without another UI worker result. The phone's installed UI had been verified before enabling its completion switch. The archive leaves automatic completion disabled on another device until its own supervised acceptance test.
+The updated worker passed 53 tests executing the Java/BeanShell source against simulated Android and Tasker APIs. Preparation identifies transcript mode from positive response controls and may use the focus toggle once before selection, then verifies the destination. A small orb alone is not transcript evidence. After selection, the transcript window must remain consistent through Send and image confirmation. The worker never toggles focus after Send or treats newly exposed historical images as delivery. Missing transcript evidence stops or holds the receipt without resending.
+
+These host tests do not establish phone acceptance. Earlier supervised replays verified a previous worker source; they are historical evidence, not validation of this revision. Fresh physical-button BLE capture through the updated Tasker flow, repeated images and uninterrupted voice audio require supervised device checks. Deploy both the supplied Java source and matching generated worker project, because this revision also strengthens the embedded queue-completion contract.
 
 Pinned Java source SHA256: {worker_sha}
 
@@ -51,7 +53,7 @@ Verify all supplied file hashes against SHA256SUMS before deployment. Source and
 
 To regenerate from the repository, no phone export is needed:
 
-    python3 integrations/tasker/generate_tasker_bundle.py --expected-worker-sha256 {worker_sha} --output Tasker-Manfred-0.5.3-test.zip
+    python3 integrations/tasker/generate_tasker_bundle.py --expected-worker-sha256 {worker_sha} --output Tasker-Manfred-test.zip
 
 The default tasker-schema-template.prj.xml contains only complete, sanitized schemas from our authored test projects, with generic IDs and timestamps. The generator checks that schema and the explicitly frozen Java source hash.
 """

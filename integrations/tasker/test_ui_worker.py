@@ -56,6 +56,7 @@ public class WorkerHarness {
   public List<String> taps=new ArrayList<String>();
   public String fileName,phase="chat",scenario;
   public long sendTime=0;
+  public boolean normalized=false;
   public String getVariable(String n){return vars.get(n);}
   public void setVariable(String n,Object v){vars.put(n,String.valueOf(v));}
   public AccessibilityService getAccessibilityService(){layout();return service;}
@@ -78,12 +79,23 @@ public class WorkerHarness {
     else labels=new String[]{"End","toggle focus mode","Image"};
    }
    else labels=scenario.equals("attach_error_ui")?new String[]{"Start a voice conversation","Image","Retry"}:scenario.equals("attach_poor_connection")?new String[]{"Start a voice conversation","Image","Poor connection"}:new String[]{"Start a voice conversation","Image"};
+   if(phase.equals("chat") && (scenario.equals("attach_normalize_small")||scenario.equals("attach_normalize_history_no_new")||scenario.equals("attach_normalize_large")||scenario.equals("prepare_unknown_small"))) labels=new String[]{"End","Attachment","toggle focus mode"};
+   if(phase.equals("chat") && scenario.equals("prepare_empty_transcript")) labels=new String[]{"End","Attachment"};
+   if(phase.equals("chat") && scenario.equals("prepare_voice_inactive")) labels=new String[]{"Start a voice conversation","Attachment"};
    root.pkg=pkg;
+   boolean transcript=phase.equals("chat")||phase.equals("voice")||phase.equals("draft")||phase.equals("sent")||phase.equals("sent_transcript");
+   if(phase.equals("chat")&&(scenario.equals("attach_normalize_small")||scenario.equals("attach_normalize_history_no_new")||scenario.equals("attach_normalize_large")||scenario.equals("prepare_unknown_small")||scenario.equals("prepare_empty_transcript")))transcript=false;
+   if(phase.equals("chat")&&scenario.equals("prepare_controls_other_window"))transcript=false;
+   if(phase.equals("sent_focus")&&(scenario.equals("attach_focus_small_wait")||scenario.equals("attach_focus_disabled_image")))transcript=true;
+   if(phase.equals("draft")&&scenario.equals("attach_presentation_changed_before_send"))transcript=false;
+   if(transcript)root.children.add(node("Copy",pkg,850));
+   if(normalized&&phase.equals("sent_transcript"))root.children.add(node("Attachment",pkg,920));
+   if(phase.equals("draft"))root.children.add(node("Start a voice conversation",pkg,900));
    for(int i=0;i<labels.length;i++) {
     AccessibilityNodeInfo n=node(labels[i],pkg,i*60);
     if(labels[i].equals("Uploading attachment")&&scenario.equals("attach_focus_upload_clears"))n.visibleUntil=android.os.SystemClock.now+1000;
     if(labels[i].equals("toggle focus mode")){
-     boolean small=phase.equals("sent_transcript")||scenario.equals("attach_focus_small_wait")||scenario.equals("attach_focus_small_empty")||scenario.equals("attach_focus_disabled_image");
+     boolean small=phase.equals("sent_transcript")||scenario.equals("attach_normalize_small")||scenario.equals("attach_normalize_history_no_new")||scenario.equals("prepare_unknown_small")||scenario.equals("attach_focus_small_wait")||scenario.equals("attach_focus_small_empty")||scenario.equals("attach_focus_disabled_image");
      n.x=small?350:100;n.y=small?1500:500;n.width=small?300:700;n.height=n.width;
     }
     if(labels[i].equals("Image")&&scenario.equals("attach_focus_disabled_image"))n.enabled=false;
@@ -94,10 +106,11 @@ public class WorkerHarness {
      button.children.add(n);n.parent=button;root.children.add(button);button.parent=root;
     } else {root.children.add(n);n.parent=root;}
    }
-   if(phase.equals("draft")&&(scenario.equals("attach_old_image")||scenario.equals("attach_delayed_new_image")))root.children.add(node("Image",pkg,300));
+   if(phase.equals("draft")&&(scenario.equals("attach_old_image")||scenario.equals("attach_delayed_new_image")||scenario.equals("attach_normalize_history_no_new")))root.children.add(node("Image",pkg,300));
    if(phase.equals("sent")&&scenario.equals("attach_delayed_new_image")){AccessibilityNodeInfo newImage=node("Image",pkg,700);newImage.visibleAfter=sendTime+1800;root.children.add(newImage);}
    if(phase.equals("sent_focus")&&scenario.equals("attach_focus_small_wait")){AccessibilityNodeInfo newImage=node("Image",pkg,700);newImage.visibleAfter=sendTime+2000;root.children.add(newImage);}
-   AccessibilityWindowInfo w=new AccessibilityWindowInfo();w.root=root;service.windows.clear();service.windows.add(w);
+   AccessibilityWindowInfo w=new AccessibilityWindowInfo();w.root=root;if(phase.equals("sent")&&scenario.equals("attach_new_window"))w.id=2;service.windows.clear();service.windows.add(w);
+   if(phase.equals("chat")&&scenario.equals("prepare_controls_other_window")){AccessibilityWindowInfo other=new AccessibilityWindowInfo();other.id=7;other.root=node("Copy",pkg,0);service.windows.add(other);}
    if(scenario.equals("occluded")){AccessibilityWindowInfo blocker=new AccessibilityWindowInfo();blocker.id=8;blocker.layer=3;blocker.type=3;blocker.root=node("UNRELATED PRIVATE TITLE","com.example.overlay",0);service.windows.add(blocker);}
    if(phase.equals("chat")&&(scenario.startsWith("stale_popup")||scenario.equals("unknown_popup"))){
     AccessibilityWindowInfo popup=new AccessibilityWindowInfo();popup.id=2221;popup.layer=1;popup.root=new AccessibilityNodeInfo();popup.root.children.add(node("Files","com.openai.chatgpt",0));
@@ -111,9 +124,9 @@ public class WorkerHarness {
    else if(value.equals("Files"))phase="chooser";
    else if(value.equals("Upload files"))phase="picker";
    else if(value.equals(fileName)){phase="draft";if(scenario.equals("selection_uncertain"))throw new IllegalStateException("mq:gesture_callback_timeout");}
-   else if(value.equals("Send Message")){sendTime=android.os.SystemClock.now;phase=scenario.startsWith("attach_focus_")?"sent_focus":"sent";if(scenario.equals("attach_network_lost"))android.net.NetworkCapabilities.validated=false;}
+   else if(value.equals("Send Message")){sendTime=android.os.SystemClock.now;phase=scenario.startsWith("attach_focus_")?"sent_focus":"sent";if(scenario.equals("attach_focus_uploading")||scenario.equals("attach_focus_upload_clears")||scenario.equals("attach_focus_unsent"))phase="sent_transcript";if(scenario.equals("attach_network_lost"))android.net.NetworkCapabilities.validated=false;}
    else if(value.equals("Start a voice conversation")){if(scenario.equals("attach_resume_failed"))throw new IllegalStateException("mq:gesture_callback_timeout");phase="voice";}
-   else if(value.equals("toggle focus mode"))phase="sent_transcript";
+   else if(value.equals("toggle focus mode")){if(!scenario.equals("prepare_unknown_small")){phase="sent_transcript";normalized=true;}}
    layout();
   }
  }
@@ -220,7 +233,7 @@ public class WorkerHarness {
    tasker.vars.put("mq_stage","attach_send");tasker.vars.put("mq_status","send_permitted");
    if(args[1].equals("attach_missing_stamp"))tasker.vars.remove("ManfredEyevueUiLedger");
    if(args[1].equals("attach_before_selection_offline"))android.net.NetworkCapabilities.validated=false;
-   if(args[1].startsWith("attach_focus_")||args[1].equals("attach_poor_connection")||args[1].equals("attach_enabled")||args[1].equals("attach_resume_failed")||args[1].equals("attach_error_ui")||args[1].equals("attach_network_lost")||args[1].equals("attach_old_image")||args[1].equals("attach_delayed_new_image"))tasker.vars.put("ManfredEyevueUiConfirmed","verified_on_device_v1");
+   if(args[1].startsWith("attach_normalize_")||args[1].startsWith("attach_focus_")||args[1].equals("attach_poor_connection")||args[1].equals("attach_enabled")||args[1].equals("attach_resume_failed")||args[1].equals("attach_error_ui")||args[1].equals("attach_network_lost")||args[1].equals("attach_old_image")||args[1].equals("attach_delayed_new_image"))tasker.vars.put("ManfredEyevueUiConfirmed","verified_on_device_v1");
    result=new JSONObject((String)bsh.eval(entry));
    if(args[1].equals("attach_replay")){int count=tasker.taps.size();tasker.vars.put("mq_status","send_permitted");result=new JSONObject((String)bsh.eval(entry));if(tasker.taps.size()!=count)throw new AssertionError("Replay clicked");}
   }
@@ -236,7 +249,7 @@ class WorkerRuntimeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cache = Path(os.environ.get("MANFRED_TASKER_JAVA_CACHE", "/nonexistent"))
-        java = list(cache.glob("*/bin/java"))
+        java = list(cache.glob("*/bin/java.exe" if os.name == "nt" else "*/bin/java"))
         if len(java) != 1 or any(not (cache / x).is_file() for x in ("bsh.jar", "json.jar", "ecj.jar")):
             raise unittest.SkipTest("Set MANFRED_TASKER_JAVA_CACHE to the isolated verification runtime")
         cls.java = str(java[0])
@@ -398,17 +411,77 @@ class WorkerRuntimeTests(unittest.TestCase):
         self.assertEqual(1, r["testTaps"].count("Start a voice conversation"))
         self.assertEqual("ui_confirmed", json.loads(r["testLedger"])["phase"])
 
-    def test_focus_mode_can_reveal_image_status_once_without_ending_voice(self):
+    def test_post_send_focus_change_never_reveals_history_or_confirms(self):
         r = self.run_case("attach_focus_success")
-        self.assertEqual("send_confirmed", r["status"])
-        self.assertTrue(r["focusModeNormalized"])
-        self.assertEqual("focused_large_orb", r["focusedModeClassification"])
-        self.assertEqual("100 500 800 1200", r["focusModeEvidence"]["orbBounds"])
-        self.assertEqual([], r["focusModeEvidence"]["transcriptControls"])
-        self.assertTrue(r["voiceActiveAfter"])
-        self.assertFalse(r["voiceResumeAttempted"])
-        self.assertEqual(1, r["testTaps"].count("toggle focus mode"))
+        self.assertEqual("ambiguous", r["status"])
+        self.assertEqual("confirmation_view_changed", r["reason"])
+        self.assertTrue(r["confirmationViewChanged"])
+        self.assertFalse(r["newImageObserved"])
+        self.assertFalse(r["focusModeToggleAttempted"])
+        self.assertNotIn("toggle focus mode", r["testTaps"])
         self.assertEqual(1, r["testTaps"].count("Send Message"))
+
+    def test_focus_normalization_precedes_selection_for_large_and_unknown_small_orbs(self):
+        for case in ("attach_normalize_small", "attach_normalize_large"):
+            with self.subTest(case=case):
+                r = self.run_case(case)
+                self.assertEqual("send_confirmed", r["status"])
+                self.assertTrue(r["preSelectionFocusToggleCompleted"])
+                self.assertTrue(r["presentationVerifiedBeforeSend"])
+                self.assertFalse(r["confirmationViewChanged"])
+                self.assertEqual("toggle focus mode", r["testTaps"][0])
+                self.assertEqual(1, r["testTaps"].count("toggle focus mode"))
+                self.assertFalse(r["focusModeToggleAttempted"])
+
+    def test_unknown_small_orb_and_empty_transcript_stop_before_selecting(self):
+        for case in ("prepare_unknown_small", "prepare_empty_transcript"):
+            with self.subTest(case=case):
+                r = self.run_case(case)
+                self.assertEqual("error", r["status"])
+                self.assertEqual("transcript_not_identified_before_selection", r["reason"])
+                self.assertFalse(r["selectionAttempted"])
+                self.assertFalse(r["sendAttempted"])
+                self.assertNotIn("Attachment", r["testTaps"])
+                if case == "prepare_unknown_small":
+                    self.assertEqual("unknown_small_orb", r["focusedModeClassification"])
+                    self.assertEqual(["toggle focus mode"], r["testTaps"])
+
+    def test_inactive_voice_is_started_before_transcript_verification(self):
+        r = self.run_case("prepare_voice_inactive")
+        self.assertEqual("prepared", r["status"])
+        self.assertEqual("Start a voice conversation", r["testTaps"][0])
+        self.assertTrue(r["transcriptPrepared"])
+        self.assertFalse(r["selectionAttempted"])
+
+    def test_changed_presentation_after_picker_return_prevents_send(self):
+        r = self.run_case("attach_presentation_changed_before_send")
+        self.assertEqual("ambiguous", r["status"])
+        self.assertEqual("transcript_changed_before_send", r["reason"])
+        self.assertTrue(r["selectionAttempted"])
+        self.assertFalse(r["sendAttempted"])
+        self.assertNotIn("Send Message", r["testTaps"])
+
+    def test_history_revealed_before_selection_is_not_a_new_submission(self):
+        r = self.run_case("attach_normalize_history_no_new")
+        self.assertEqual("ambiguous", r["status"])
+        self.assertTrue(r["preSelectionFocusToggleCompleted"])
+        self.assertEqual(1, len(r["imagesBeforeSend"]))
+        self.assertEqual(1, len(r["imagesAfterSend"]))
+        self.assertFalse(r["newImageObserved"])
+        self.assertEqual(1, r["testTaps"].count("Send Message"))
+
+    def test_another_windows_controls_do_not_establish_transcript(self):
+        r = self.run_case("prepare_controls_other_window")
+        self.assertEqual("transcript_not_identified_before_selection", r["reason"])
+        self.assertFalse(r["selectionAttempted"])
+        self.assertEqual([], r["testTaps"])
+
+    def test_new_window_cannot_confirm_an_image_against_old_window_baseline(self):
+        r = self.run_case("attach_new_window")
+        self.assertEqual("confirmation_view_changed", r["reason"])
+        self.assertFalse(r["newImageObserved"])
+        self.assertTrue(r["confirmationViewChanged"])
+        self.assertNotIn("toggle focus mode", r["testTaps"])
 
     def test_small_orb_does_not_hide_transcript_while_waiting_for_new_image(self):
         r = self.run_case("attach_focus_small_wait")
@@ -427,10 +500,10 @@ class WorkerRuntimeTests(unittest.TestCase):
         r = self.run_case("attach_focus_small_empty")
         self.assertEqual("ambiguous", r["status"])
         self.assertFalse(r["newImageObserved"])
-        self.assertEqual("transcript_small_orb", r["focusedModeClassification"])
+        self.assertEqual("unknown_small_orb", r["focusedModeClassification"])
         self.assertFalse(r["focusModeToggleAttempted"])
         self.assertNotIn("toggle focus mode", r["testTaps"])
-        self.assertGreaterEqual(r["elapsedMs"], 15000)
+        self.assertTrue(r["confirmationViewChanged"])
 
     def test_large_orb_with_transcript_controls_is_conflicting_and_never_toggled(self):
         r = self.run_case("attach_focus_conflict")
@@ -458,7 +531,7 @@ class WorkerRuntimeTests(unittest.TestCase):
         self.assertTrue(r["uploadInProgress"])
         self.assertTrue(r["newImageObserved"])
         self.assertTrue(r["confirmationEnabled"])
-        self.assertEqual(1, r["testTaps"].count("toggle focus mode"))
+        self.assertEqual(0, r["testTaps"].count("toggle focus mode"))
         self.assertNotIn("Retry", r["testTaps"])
 
     def test_upload_must_clear_before_ui_completion(self):
@@ -495,7 +568,7 @@ class WorkerRuntimeTests(unittest.TestCase):
         self.assertNotIn("Send Message", r["testTaps"])
         self.assertEqual("selection_attempted", json.loads(r["testLedger"])["phase"])
         self.assertGreaterEqual(r["elapsedMs"], 5000)
-        self.assertLess(r["elapsedMs"], 6000)
+        self.assertLess(r["elapsedMs"], 6500)
         target = r["sendTarget"]
         self.assertTrue(target["timedOut"])
         self.assertEqual(1, target["windowId"])

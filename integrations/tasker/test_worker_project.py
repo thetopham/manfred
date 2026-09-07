@@ -152,6 +152,7 @@ process.stdout.write(JSON.stringify({claimRun,sendRun,clearedBeforeJava,queue:JS
             "networkValidated": True, "confirmationEnabled": True,
             "errorUiObserved": False, "uploadInProgress": False,
             "focusModeToggleAttempted": False, "focusModeToggleCompleted": False,
+            "presentationVerifiedBeforeSend": True, "confirmationViewChanged": False,
         }
         evidence.update(overrides)
         return evidence

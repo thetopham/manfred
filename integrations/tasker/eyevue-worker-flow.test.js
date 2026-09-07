@@ -14,7 +14,8 @@ function confirmed(changes = {}) {
         selectionActionCompleted:true, sendActionCompleted:true, submissionObserved:true,
         newImageObserved:true, networkValidated:true, confirmationEnabled:true,
         errorUiObserved:false, uploadInProgress:false, focusModeToggleAttempted:false,
-        focusModeToggleCompleted:false, ...changes };
+        focusModeToggleCompleted:false,
+        presentationVerifiedBeforeSend:true, confirmationViewChanged:false, ...changes };
 }
 test("only matching preparation without content submission permits begin_send", () => {
     assert.equal(flow.afterPrepare(ui(), id, owner).op, "begin_send");

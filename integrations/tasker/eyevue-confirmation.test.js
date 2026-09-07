@@ -10,6 +10,7 @@ function evidence(changes = {}) {
         submissionObserved:true, newImageObserved:true, networkValidated:true,
         confirmationEnabled:true, errorUiObserved:false, uploadInProgress:false,
         focusModeToggleAttempted:false, focusModeToggleCompleted:false,
+        presentationVerifiedBeforeSend:true, confirmationViewChanged:false,
         voiceNeedsResume:false, voiceActiveAfter:true, ...changes};
 }
 function decide(value) { return flow.afterAttach(JSON.stringify(value), id, owner); }
@@ -19,7 +20,7 @@ test("complete requires all positive evidence in an unchanged presentation", () 
 });
 for (const field of ["selectionAttempted", "sendAttempted", "selectionActionCompleted",
     "sendActionCompleted", "submissionObserved", "newImageObserved", "networkValidated",
-    "confirmationEnabled"]) {
+    "confirmationEnabled", "presentationVerifiedBeforeSend"]) {
     test("holds missing, false, or non-boolean positive evidence: " + field, () => {
         for (const invalid of [undefined, null, false, 0, 1, "true", {}, []]) {
             const decision = decide(evidence({[field]:invalid}));
@@ -29,7 +30,7 @@ for (const field of ["selectionAttempted", "sendAttempted", "selectionActionComp
     });
 }
 for (const field of ["errorUiObserved", "uploadInProgress", "focusModeToggleAttempted",
-    "focusModeToggleCompleted"]) {
+    "focusModeToggleCompleted", "confirmationViewChanged"]) {
     test("holds missing, true, or non-boolean negative evidence: " + field, () => {
         for (const invalid of [undefined, null, true, 0, 1, "false", {}, []]) {
             assert.equal(decide(evidence({[field]:invalid})).op, "hold");
@@ -81,4 +82,14 @@ test("decision parsing has no mutation, dispatch, retry, or send side effects", 
     const copy = raw;
     for (let i=0; i<20; i++) assert.equal(flow.afterAttach(raw,id,owner).op, "hold");
     assert.equal(raw, copy);
+});
+
+test("a presentation change without a worker toggle still cannot confirm", () => {
+    const decision = decide(evidence({confirmationViewChanged:true}));
+    assert.equal(decision.op, "hold");
+    assert.equal(decision.reason, "confirmation_view_changed");
+});
+test("verified normalization before selection does not taint an unchanged send view", () => {
+    assert.equal(decide(evidence({preSelectionFocusToggleAttempted:true,
+        preSelectionFocusToggleCompleted:true})).op, "complete");
 });

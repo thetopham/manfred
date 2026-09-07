@@ -543,8 +543,7 @@ void mqTap(AccessibilityService service, String pkg, String kind, String value) 
 }
 
 // Only anonymous Image-node signatures are retained; no message text or window title.
-// Focus direction uses the observed relative orb sizes within its own app window.
-// Missing/conflicting geometry never authorizes a toggle.
+// Orb size alone is not transcript evidence: focused Live can also have a small orb.
 JSONObject mqFocusModeEvidence(AccessibilityService service, String pkg) {
     JSONObject evidence = new JSONObject();
     evidence.put("classification", "unknown");
@@ -582,11 +581,87 @@ JSONObject mqFocusModeEvidence(AccessibilityService service, String pkg) {
     int orbWidth = orbBounds.right - orbBounds.left;
     int windowWidth = windowBounds.right - windowBounds.left;
     boolean validGeometry = !orbBounds.isEmpty() && !windowBounds.isEmpty() && orbBounds.left >= windowBounds.left && orbBounds.top >= windowBounds.top && orbBounds.right <= windowBounds.right && orbBounds.bottom <= windowBounds.bottom;
+    evidence.put("validGeometry", validGeometry);
     if (!sameWindowVoice || !validGeometry || windowWidth <= 0) return evidence;
-    if (orbWidth * 2 < windowWidth) evidence.put("classification", "transcript_small_orb");
+    if (orbWidth * 2 < windowWidth && transcriptControls.length() > 0) evidence.put("classification", "transcript_small_orb");
+    else if (orbWidth * 2 < windowWidth) evidence.put("classification", "unknown_small_orb");
     else if (transcriptControls.length() == 0) evidence.put("classification", "focused_large_orb");
     else evidence.put("classification", "conflicting_large_orb_with_transcript_controls");
     return evidence;
+}
+
+// Positive response controls must share one app window with a known voice entry.
+// An empty transcript without those controls is deliberately unsupported.
+JSONObject mqTranscriptEvidence(AccessibilityService service, String pkg) {
+    JSONObject evidence = new JSONObject();
+    evidence.put("verified", false);
+    HashSet windowIds = new HashSet();
+    HashSet seenControls = new HashSet();
+    JSONArray controls = new JSONArray();
+    String[] labels = new String[] {"Copy", "Good response", "Bad response", "Read aloud"};
+    List voices = mqFind(service, pkg, "label", "End");
+    voices.addAll(mqFind(service, pkg, "label", "Start a voice conversation"));
+    for (int ci = 0; ci < labels.length; ci++) {
+        List found = mqFind(service, pkg, "label", labels[ci]);
+        for (int fi = 0; fi < found.size(); fi++) {
+            AccessibilityWindowInfo window = (AccessibilityWindowInfo) ((List) found.get(fi)).get(1);
+            for (int vi = 0; vi < voices.size(); vi++) {
+                if (((AccessibilityWindowInfo) ((List) voices.get(vi)).get(1)).getId() == window.getId()) {
+                    windowIds.add(Integer.valueOf(window.getId()));
+                    if (seenControls.add(labels[ci])) controls.put(labels[ci]);
+                }
+            }
+        }
+    }
+    evidence.put("transcriptControls", controls);
+    if (windowIds.size() == 1) {
+        evidence.put("windowId", ((Integer) windowIds.iterator().next()).intValue());
+        evidence.put("verified", true);
+    }
+    return evidence;
+}
+
+JSONObject mqPrepareTranscript(AccessibilityService service, String pkg, JSONObject result) {
+    JSONObject evidence = mqTranscriptEvidence(service, pkg);
+    if (!evidence.getBoolean("verified")) {
+        JSONObject focus = mqFocusModeEvidence(service, pkg);
+        result.put("focusModeEvidence", focus);
+        result.put("focusedModeClassification", focus.getString("classification"));
+        // One reversible view change BEFORE selection. Its direction is unknown;
+        // only positive transcript evidence at the destination permits progress.
+        if (focus.optInt("toggleMatches", 0) != 1 || !focus.optBoolean("sameWindowVoice", false) || !focus.optBoolean("validGeometry", false)) mqFail("transcript_not_identified_before_selection");
+        mqRequireUnlocked();
+        result.put("preSelectionFocusToggleAttempted", true);
+        mqTap(service, pkg, "label", "toggle focus mode");
+        result.put("preSelectionFocusToggleCompleted", true);
+    }
+    long deadline = SystemClock.elapsedRealtime() + 5000;
+    int stable = 0;
+    int previousWindow = -1;
+    do {
+        mqRequireUnlocked();
+        evidence = mqTranscriptEvidence(service, pkg);
+        int window = evidence.optInt("windowId", -1);
+        stable = evidence.getBoolean("verified") ? (window == previousWindow ? stable + 1 : 1) : 0;
+        previousWindow = window;
+        if (stable >= 3) {
+            result.put("transcriptPrepared", true);
+            result.put("preparedTranscriptEvidence", evidence);
+            return evidence;
+        }
+        SystemClock.sleep(200);
+    } while (SystemClock.elapsedRealtime() < deadline);
+    mqFail("transcript_not_identified_before_selection");
+    return evidence;
+}
+
+JSONArray mqWindowImages(JSONArray images, int windowId) {
+    JSONArray accepted = new JSONArray();
+    for (int i = 0; i < images.length(); i++) {
+        JSONObject image = images.getJSONObject(i);
+        if (image.getInt("windowId") == windowId) accepted.put(image);
+    }
+    return accepted;
 }
 
 JSONArray mqImageSnapshot(AccessibilityService service, String pkg) {
@@ -805,6 +880,11 @@ result.put("uploadObserved", false);
 result.put("focusModeToggleAttempted", false);
 result.put("focusModeToggleCompleted", false);
 result.put("focusModeNormalized", false);
+result.put("preSelectionFocusToggleAttempted", false);
+result.put("preSelectionFocusToggleCompleted", false);
+result.put("transcriptPrepared", false);
+result.put("presentationVerifiedBeforeSend", false);
+result.put("confirmationViewChanged", false);
 result.put("focusedModeClassification", "unknown");
 result.put("newImageObserved", false);
 result.put("voiceState", "unknown");
@@ -853,6 +933,11 @@ try {
             }
             result.put("voiceActiveBefore", voiceBefore);
             ledger.put("voiceActiveBefore", voiceBefore);
+            result.put("step", "prepare_transcript");
+            JSONObject transcript = mqPrepareTranscript(service, chatPackage, result);
+            ledger.put("transcriptWindowId", transcript.getInt("windowId"));
+            ledger.put("preSelectionFocusToggleAttempted", result.getBoolean("preSelectionFocusToggleAttempted"));
+            ledger.put("preSelectionFocusToggleCompleted", result.getBoolean("preSelectionFocusToggleCompleted"));
             if (mqPresent(service, chatPackage, "Remove")) mqFail("existing_attachment_draft");
             if (mqOne(service, chatPackage, "label", "Attachment", 5000) == null) mqFail("attachment_button_missing");
             result.put("step", "attachment_menu");
@@ -889,6 +974,11 @@ try {
             if (ledger.optInt("version", 0) != 1 || !id.equals(ledger.optString("id", "")) || !owner.equals(ledger.optString("owner", "")) || !"prepared".equals(ledger.optString("phase", "")) || !image.getString("sha256").equals(ledger.optString("sha256", "")) || !fileName.equals(ledger.optString("fileName", "")) || !image.getString("uri").equals(ledger.optString("uri", ""))) mqFail("prepared_worker_stamp_missing");
             long stampAge = SystemClock.elapsedRealtime() - ledger.getLong("updatedElapsedMs");
             if (stampAge < 0 || stampAge > 90000) mqFail("prepared_worker_stamp_expired");
+            if (!ledger.has("transcriptWindowId")) mqFail("prepared_transcript_stamp_missing");
+            int transcriptWindowId = ledger.getInt("transcriptWindowId");
+            result.put("transcriptPrepared", true);
+            result.put("preSelectionFocusToggleAttempted", ledger.optBoolean("preSelectionFocusToggleAttempted", false));
+            result.put("preSelectionFocusToggleCompleted", ledger.optBoolean("preSelectionFocusToggleCompleted", false));
             voiceBefore = ledger.optBoolean("voiceActiveBefore", false);
             result.put("voiceActiveBefore", voiceBefore);
             if (mqOne(service, pickerPackage, "file", fileName, 0) == null) mqFail("exact_file_no_longer_visible");
@@ -918,7 +1008,11 @@ try {
             mqWaitForSendTarget(service, chatPackage);
             mqOwnedImage(id, owner, "sending");
             if (!mqNetworkValidated()) mqFail("internet_not_validated_before_send");
-            JSONArray imagesBeforeSend = mqImageSnapshot(service, chatPackage);
+            JSONObject beforePresentation = mqTranscriptEvidence(service, chatPackage);
+            result.put("presentationBeforeSend", beforePresentation);
+            if (!beforePresentation.getBoolean("verified") || beforePresentation.optInt("windowId", -1) != transcriptWindowId) mqFail("transcript_changed_before_send");
+            result.put("presentationVerifiedBeforeSend", true);
+            JSONArray imagesBeforeSend = mqWindowImages(mqImageSnapshot(service, chatPackage), transcriptWindowId);
             result.put("imagesBeforeSend", imagesBeforeSend);
             mqLedgerWrite(ledger, "send_attempted");
             sendAttempted = true;
@@ -941,21 +1035,16 @@ try {
                     result.put("voiceActiveAfterSubmission", end);
                     result.put("voiceNeedsResume", !end && start);
                     result.put("voiceState", end ? "active" : start ? "inactive" : "unknown");
-                    JSONArray imagesAfterSend = mqImageSnapshot(service, chatPackage);
-                    if (end && imagesAfterSend.length() == 0 && !result.getBoolean("focusModeToggleAttempted")) {
-                        JSONObject focusEvidence = mqFocusModeEvidence(service, chatPackage);
-                        result.put("focusModeEvidence", focusEvidence);
-                        result.put("focusedModeClassification", focusEvidence.getString("classification"));
-                        if ("focused_large_orb".equals(focusEvidence.getString("classification"))) {
-                            // Only the verified large focused orb may reveal the
-                            // transcript. A small orb already represents transcript mode.
-                            result.put("step", "reveal_upload_status");
-                            result.put("focusModeToggleAttempted", true);
-                            mqTap(service, chatPackage, "label", "toggle focus mode");
-                            result.put("focusModeToggleCompleted", true);
-                            stable = 0;
-                            continue;
-                        }
+                    JSONObject afterPresentation = mqTranscriptEvidence(service, chatPackage);
+                    result.put("presentationAfterSend", afterPresentation);
+                    JSONObject focusEvidence = mqFocusModeEvidence(service, chatPackage);
+                    result.put("focusModeEvidence", focusEvidence);
+                    result.put("focusedModeClassification", focusEvidence.getString("classification"));
+                    JSONArray imagesAfterSend = mqWindowImages(mqImageSnapshot(service, chatPackage), transcriptWindowId);
+                    // A changed presentation can reveal OLD images. Never toggle after Send.
+                    if (!afterPresentation.getBoolean("verified") || afterPresentation.optInt("windowId", -1) != transcriptWindowId) {
+                        result.put("confirmationViewChanged", true);
+                        break;
                     }
                     result.put("imagesAfterSend", imagesAfterSend);
                     result.put("newImageObserved", mqNewImageEvidence(imagesBeforeSend, imagesAfterSend));
@@ -965,7 +1054,6 @@ try {
                     result.put("uploadInProgress", uploading);
                     if (uploading) result.put("uploadObserved", true);
                     result.put("errorUiObserved", errorVisible);
-                    result.put("focusModeNormalized", result.getBoolean("focusModeToggleCompleted") && end && imagesAfterSend.length() > 0);
                     mqLedgerWrite(ledger, "submission_observed");
                     // Keep observing a pending upload within this bounded window.
                     // A visible error holds immediately and never clicks Retry.
@@ -975,11 +1063,11 @@ try {
             }
             // Enable only after the supervised phone acceptance test validates this
             // UI predicate. This confirms UI submission, never a server/audio receipt.
-            boolean verifiedUiPredicate = result.getBoolean("submissionObserved") && result.getBoolean("newImageObserved") && result.getBoolean("networkValidated") && !result.getBoolean("errorUiObserved") && !result.getBoolean("uploadInProgress");
+            boolean verifiedUiPredicate = result.getBoolean("presentationVerifiedBeforeSend") && !result.getBoolean("confirmationViewChanged") && result.getBoolean("submissionObserved") && result.getBoolean("newImageObserved") && result.getBoolean("networkValidated") && !result.getBoolean("errorUiObserved") && !result.getBoolean("uploadInProgress");
             boolean confirmationEnabled = mqValue("ManfredEyevueUiConfirmed").equals("verified_on_device_v1");
             result.put("confirmationEnabled", confirmationEnabled);
             result.put("status", verifiedUiPredicate && confirmationEnabled ? "send_confirmed" : "ambiguous");
-            result.put("reason", verifiedUiPredicate && confirmationEnabled ? "ui_confirmed_submission_no_server_receipt" : result.getBoolean("errorUiObserved") ? "upload_error_observed" : result.getBoolean("uploadInProgress") ? "upload_in_progress" : result.getBoolean("submissionObserved") ? "submission_observed_confirmation_unverified" : "send_acceptance_not_observed");
+            result.put("reason", verifiedUiPredicate && confirmationEnabled ? "ui_confirmed_submission_no_server_receipt" : result.getBoolean("confirmationViewChanged") ? "confirmation_view_changed" : result.getBoolean("errorUiObserved") ? "upload_error_observed" : result.getBoolean("uploadInProgress") ? "upload_in_progress" : result.getBoolean("submissionObserved") ? "submission_observed_confirmation_unverified" : "send_acceptance_not_observed");
             if (verifiedUiPredicate && confirmationEnabled) {
                 mqLedgerWrite(ledger, "ui_confirmed");
                 if (result.optBoolean("voiceNeedsResume", false)) {

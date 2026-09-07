@@ -31,6 +31,7 @@
             value.selectionActionCompleted === true && value.sendActionCompleted === true &&
             value.submissionObserved === true && value.newImageObserved === true &&
             value.networkValidated === true && value.confirmationEnabled === true &&
+            value.presentationVerifiedBeforeSend === true && value.confirmationViewChanged === false &&
             value.errorUiObserved === false && value.uploadInProgress === false &&
             value.focusModeToggleAttempted === false && value.focusModeToggleCompleted === false;
     }
@@ -45,7 +46,7 @@
             // Until both snapshots share a verified presentation, fail closed;
             // never turn this ambiguity into another selection or Send attempt.
             decision.reason = value.focusModeToggleAttempted === true ||
-                value.focusModeToggleCompleted === true ?
+                value.focusModeToggleCompleted === true || value.confirmationViewChanged === true ?
                 "confirmation_view_changed" : "confirmation_evidence_incomplete";
         }
         // Observed voice state is independent of whether image confirmation is

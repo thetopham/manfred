@@ -33,7 +33,7 @@ The complete sanitized Tasker schema is checked in as `tasker-schema-template.pr
 ```sh
 python3 integrations/tasker/generate_tasker_bundle.py \
   --expected-worker-sha256 <frozen-source-sha256> \
-  --output /path/to/Tasker-Manfred-0.5.3-test.zip
+  --output /path/to/Tasker-Manfred-test.zip
 ```
 
 Supply the SHA256 of the reviewed worker source being packaged. The default schema is pinned and contains only generic authored actions; an optional `--template` accepts the pinned legacy schema export. The archive's own README covers deployment, and SHA256SUMS covers every supplied file. It contains no personal queue, image or recovery artifact. The separate generators below support staged receipt-only setup using the same checked-in schema.
@@ -102,7 +102,7 @@ Receipts require the native UUID/filename relationship (`EyeVue_<milliseconds>_<
 
 Each call sets `%mq_ok`, `%mq_status` and `%mq_error`. Successful item outputs include ID, owner, URI, filename, dimensions, bytes and checksum; summary outputs are `%mq_queued`, `%mq_activeid` and `%mq_activestate`. Failed/busy operations clear item outputs, and confirmation is consumed. Do not insert `inspect` into a worker and reuse the item locals it overwrites.
 
-The worker claims one item, verifies content and prepares the picker without selecting. A matching prepare result permits `begin_send`. The local permit and UI ledger are consumed **before the first possible selection/upload**. Only a matching `send_confirmed` result with both attempt flags completes the queue item. Uncertainty holds it. A stop/crash can leave claimed or sending state; all three active states block another worker. There is no expiry, takeover or automatic resend.
+The worker claims one item, verifies content, positively identifies transcript mode before selecting, and prepares the picker without selecting. It may try the uniquely identified focus toggle once before selection, then requires three stable transcript samples. Empty transcripts without recognized response controls are unsupported until fresh device evidence supplies a reliable selector. It never changes focus after Send. A matching prepare result permits `begin_send`. The local permit and UI ledger are consumed **before the first possible selection/upload**. Only a matching `send_confirmed` result with completed selection/send actions and explicit positive submission, new-image, network and unchanged-transcript evidence completes the queue item. Both snapshots must come from the same positively identified transcript window; missing proof or a changed presentation holds even if historical images appear. Uncertainty holds it. A stop/crash can leave claimed or sending state; all three active states block another worker. There is no expiry, takeover or automatic resend.
 
 The final worker action schedules the dispatcher at priority 4; it starts worker priority 5 only for a fresh ready queue and no running worker. Burst delivery and final-action scheduling still require phone acceptance. Tasker globals are not a transactional database or an exactly-once guarantee across every OS failure.
 
