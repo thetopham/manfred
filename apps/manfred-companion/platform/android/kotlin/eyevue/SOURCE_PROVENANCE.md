@@ -37,8 +37,11 @@ audio routing. Both transports share the former photo-session validation/MediaSt
 commit code through `EyevuePhotoStore`; the filename, actual dimensions, hash, URI and ready
 intent remain the same, with additive `imageSource` metadata.
 
-The ordinary physical shutter does not emit an AA15 image on the observed firmware.
-BLE mode therefore listens for app capture requests only and never turns its own 0x22
-acknowledgement or photo-completion event into another exposure. Physical-shutter original
-retrieval remains part of the Wi-Fi session. No opaque image-pull, firmware, or camera-setting
+The observed ordinary physical shutter has not emitted AA15 image packets in passive
+tests; this does not establish whether an internal thumbnail exists. The 0.5.6 physical
+button bridge waits for the stored photo to finish, then explicitly requests a SECOND
+exposure using the proven AI-photo command. It suppresses its own trigger echoes through
+transfer, save, and rearm. It does not retrieve the original physical photo over BLE.
+See docs/eyevue-ble-button.md for separate capture and Tasker acceptance results,
+including the September 6 passive test. No opaque image-pull, firmware, or camera-setting
 commands are introduced.

@@ -29,3 +29,11 @@ This path sends no Wi-Fi startup or transfer-finish command. It preserves the ex
 Native regression tests cover repeated physical captures, original-photo completion ordering, duplicate/self events, direct app previews, invalid trigger payloads, cancellation and restart, readiness queries, and write failure.
 
 Physical acceptance still requires two separate button presses with ChatGPT Live foreground, two fresh BLE previews, two exact-image receipts and attachments, and no automatic recapture loop. Measure `physical_shutter_received`, `physical_photo_complete`, `ble_preview_requested`, `ble_preview_received`, the JPEG save, and Tasker confirmation independently. Image display is not proof of uninterrupted voice.
+
+### September 6, 2026 device follow-up (0.5.6)
+
+Two physical presses completed the original-photo gate, requested one additional BLE exposure each, saved distinct 320 x 180 JPEGs, and rearmed. Received shutter indication to gallery save was 5.960 s and 5.930 s. No automatic recapture loop was observed. Tasker selected the first preview but timed out while the Send parent remained disabled (sendAttempted=false); the held entry blocked the second receipt. Automatic Live delivery is still unverified.
+
+To test whether the normal shutter already transfers its own preview, the BLE photo session was stopped while the GATT connection and AA15 notification subscription remained connected. One physical press at 23:15:11.131 produced busy/idle and a count advance at 23:15:13.560. Through 23:20:56, the passive trace contained zero AA15 packets, zero assembled images, and zero app command writes. The user confirmed this was a normal button press. This is evidence about transfer in this setup, not proof that the glasses do not internally generate a thumbnail.
+
+The pinned vendor command writer defines an appPullImage(type) request (0x36) separately from takePhoto(style) (0x22), but this source declaration does not establish a working same-photo retrieval path on this device. Do not replace the second exposure with an assumed automatic image or describe an updated count as image bytes. The extra-capture session was left stopped following this experiment.
