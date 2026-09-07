@@ -16,9 +16,9 @@ Tasker being enabled does not connect the glasses or start Manfred's BLE session
 
 ## Capture ownership and evidence
 
-The session subscribes to command/status notifications before querying idle status and the initial media count. A physical trigger requires the observed normal-shutter indication `0x22 [01]`, followed by photo busy/idle and an advanced media count. Count and idle may arrive in either order after busy. A count or idle status alone does not trigger a preview.
+The session subscribes to command/status notifications before querying the initial media count. On this TK8, 0x48 returns configuration values rather than a 0x45 idle response, so BLE startup does not send it. A physical trigger requires the observed normal-shutter indication `0x22 [01]`, followed by photo busy/idle and an advanced media count. Count and idle may arrive in either order after busy. A count or idle status alone does not trigger a preview.
 
-One capture owner reserves the request before queueing it. Further app requests and duplicate trigger/status events cannot create parallel previews. The session suppresses trigger interpretation throughout its own `0x22 [31]` command, AA15 transfer, save, and fresh idle/count rearm. A button press during this busy interval is not queued as another preview; the glasses may still store an additional ordinary photo.
+One capture owner reserves the request before queueing it. Further app requests and duplicate trigger/status events cannot create parallel previews. The session suppresses trigger interpretation throughout its own `0x22 [31]` command, AA15 transfer, save, and observed-idle and fresh-count rearm. A button press during this busy interval is not queued as another preview; the glasses may still store an additional ordinary photo.
 
 The existing AA15 helper subscribes before sending the preview command, validates its assembled transfer, and drains an accepted GATT write before relinquishing ownership on cancellation. Stopping or losing the BLE connection removes the session observer and pending request. A restarted session obtains a fresh count baseline; it does not replay the cancelled capture.
 

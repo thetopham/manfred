@@ -12,6 +12,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -41,10 +42,11 @@ internal class EyevueBlePreviewSession(
     private var requests: Channel<Request>? = null
     private var physical: Request? = null
     private val gate = EyevueCaptureCycleGate()
+    private val cameraBusy = MutableStateFlow<Boolean?>(null)
 
     /** Reserve ownership before enqueueing: neither an app click nor a BLE echo can race it. */
     fun requestPreview(): Boolean {
-        if (state != State.READY) return false
+        if (state != State.READY || cameraBusy.value == true) return false
         state = State.PREVIEW
         gate.disarm()
         onStatus("Requesting a BLE preview", false)
@@ -56,6 +58,7 @@ internal class EyevueBlePreviewSession(
         val queue = Channel<Request>(1)
         requests = queue
         state = State.REARMING
+        cameraBusy.value = null
         // Subscribe before any query or capture can generate status/shutter notifications.
         val observer = launch(start = CoroutineStart.UNDISPATCHED) {
             frames.collect { frame -> observe(frame, queue) }
@@ -82,7 +85,7 @@ internal class EyevueBlePreviewSession(
                 onStatus("Saving the BLE preview", false)
                 publish(bytes, request.detectedAt)
                 onPhase("ble_preview_saved")
-                // Keep self-trigger suppression through saving and fresh camera/count queries.
+                // Keep self-trigger suppression through saving, observed idle, and a fresh count.
                 // A repeated old count cannot authorize the next physical capture.
                 rearm()
             }
@@ -98,6 +101,11 @@ internal class EyevueBlePreviewSession(
     }
 
     private fun observe(frame: EyevueFrame, queue: Channel<Request>) {
+        // 0x45 is an unsolicited activity event. 0x48 returns configuration on TK8,
+        // not a requested 0x45 idle response; never use it to arm the BLE session.
+        if (frame.commandId == 0x45 && frame.payload.size >= 9 && frame.payload[0].toInt() in 0..1) {
+            cameraBusy.value = frame.payload[0].toInt() == 1
+        }
         if (state == State.READY && frame.commandId == EyevueProtocol.CMD_TAKE_PHOTO &&
             frame.payload.contentEquals(byteArrayOf(0x01))) {
             val request = Request(now(), CompletableDeferred())
@@ -127,19 +135,33 @@ internal class EyevueBlePreviewSession(
     private suspend fun rearm() {
         state = State.REARMING
         gate.disarm()
-        onStatus("Checking the glasses camera before the next BLE preview", false)
-        query(EyevueProtocol.buildGetDeviceStatusPacket()) {
-            it.commandId == 0x45 && it.payload.size >= 9 && it.payload[0].toInt() == 0
+        onStatus("Reading the glasses photo count before the next BLE preview", false)
+        try {
+            withTimeout(queryTimeoutMs) {
+                while (true) {
+                    // Completed AA15 bytes suffice when no busy event was observed.
+                    // If the camera explicitly reported busy, wait for its actual idle event.
+                    if (cameraBusy.value == true) {
+                        onPhase("ble_preview_waiting_for_idle")
+                        cameraBusy.first { it == false }
+                    }
+                    val count = query(EyevueProtocol.valuePacket(EyevueProtocol.CMD_GET_MEDIA_COUNT, 0)) {
+                        (it.commandId == EyevueProtocol.CMD_GET_MEDIA_COUNT ||
+                            it.commandId == EyevueProtocol.CMD_RECEIVE_THUMBNAIL_COUNT) && mediaCount(it) != null
+                    }
+                    // Activity can start during the count query; do not rearm a busy camera.
+                    if (cameraBusy.value == true) continue
+                    currentCoroutineContext().ensureActive()
+                    gate.arm(mediaCount(count)!!)
+                    state = State.READY
+                    onPhase("ble_preview_armed")
+                    onStatus("Ready - press the glasses shutter or use Take preview", true)
+                    break
+                }
+            }
+        } catch (timeout: TimeoutCancellationException) {
+            throw IOException("The glasses did not finish the observed camera activity or return a fresh photo count", timeout)
         }
-        val count = query(EyevueProtocol.valuePacket(EyevueProtocol.CMD_GET_MEDIA_COUNT, 0)) {
-            (it.commandId == EyevueProtocol.CMD_GET_MEDIA_COUNT ||
-                it.commandId == EyevueProtocol.CMD_RECEIVE_THUMBNAIL_COUNT) && mediaCount(it) != null
-        }
-        currentCoroutineContext().ensureActive()
-        gate.arm(mediaCount(count)!!)
-        state = State.READY
-        onPhase("ble_preview_armed")
-        onStatus("Ready - press the glasses shutter or use Take preview", true)
     }
 
     private suspend fun query(packet: ByteArray, accepts: (EyevueFrame) -> Boolean): EyevueFrame =
@@ -154,7 +176,7 @@ internal class EyevueBlePreviewSession(
                 currentCoroutineContext().ensureActive()
                 reply.await()
             } catch (timeout: TimeoutCancellationException) {
-                throw IOException("The glasses did not confirm camera readiness; restart the BLE preview session", timeout)
+                throw IOException("The glasses did not return a fresh photo count; restart the BLE preview session", timeout)
             } finally {
                 reply.cancel()
             }

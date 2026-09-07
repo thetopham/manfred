@@ -48,7 +48,7 @@ class EyevueBlePreviewSessionTest {
         rig.ready.receive()
         assertEquals(2, rig.previewWrites)
         assertEquals(2, rig.saved.size)
-        assertTrue(rig.commands.all { it in listOf(0x48, 0x40, 0x22) })
+        assertTrue(rig.commands.all { it in listOf(0x40, 0x22) })
         job.cancelAndJoin()
         assertEquals(0, rig.frames.subscriptionCount.value)
     }
@@ -196,7 +196,7 @@ class EyevueBlePreviewSessionTest {
     }
 
     @Test(timeout = 5_000)
-    fun startupWithoutCameraReadinessDoesNotArmOrTakeAPhoto() = runBlocking {
+    fun startupWithoutFreshCountDoesNotArmOrTakeAPhoto() = runBlocking {
         val rig = Rig(queryTimeoutMs = 80)
         rig.answerQueries = false
         val job = rig.start(this)
@@ -222,6 +222,54 @@ class EyevueBlePreviewSessionTest {
         assertEquals(0, rig.previewWrites)
     }
 
+    @Test(timeout = 5_000)
+    fun initialArmAndCompletedPreviewNeedOnlyActualCountRepliesNotConfigurationQueries() = runBlocking {
+        val rig = Rig()
+        rig.emitPreviewStatus = false
+        val job = rig.start(this)
+        rig.ready.receive()
+        assertEquals(listOf(0x40), rig.commands)
+        assertTrue(rig.session.requestPreview())
+        rig.ready.receive()
+        assertEquals(listOf(0x40, 0x22, 0x40), rig.commands)
+        assertEquals(1, rig.saved.size)
+        assertFalse(rig.commands.contains(0x48))
+        job.cancelAndJoin()
+    }
+
+    @Test(timeout = 5_000)
+    fun previewBusyObservedBeforeImageMustBecomeIdleBeforeRearm() = runBlocking {
+        val rig = Rig()
+        rig.previewRemainsBusy = true
+        val job = rig.start(this)
+        rig.ready.receive()
+        assertTrue(rig.session.requestPreview())
+        rig.savedEvents.receive()
+        yield()
+        assertTrue(rig.ready.tryReceive().isFailure)
+        assertFalse(rig.session.requestPreview())
+        assertEquals(listOf(0x40, 0x22), rig.commands)
+        rig.frames.emit(status(false))
+        rig.ready.receive()
+        assertEquals(listOf(0x40, 0x22, 0x40), rig.commands)
+        assertEquals(1, rig.previewWrites)
+        job.cancelAndJoin()
+    }
+
+    @Test(timeout = 5_000)
+    fun observedBusyTimeoutStopsWithoutSendingAnyStatusQueryOrAnotherPreview() = runBlocking {
+        val rig = Rig(queryTimeoutMs = 80)
+        rig.previewRemainsBusy = true
+        val job = rig.start(this)
+        rig.ready.receive()
+        assertTrue(rig.session.requestPreview())
+        rig.savedEvents.receive()
+        assertTrue(job.await().exceptionOrNull() is IOException)
+        assertEquals(listOf(0x40, 0x22), rig.commands)
+        assertEquals(1, rig.saved.size)
+        assertEquals(0, rig.frames.subscriptionCount.value)
+    }
+
     private class Rig(confirmationTimeoutMs: Long = 1000, queryTimeoutMs: Long = 1000) {
         val frames = MutableSharedFlow<EyevueFrame>()
         val results = MutableSharedFlow<Result<ByteArray>>()
@@ -230,9 +278,12 @@ class EyevueBlePreviewSessionTest {
         val previewStarted = Channel<Unit>(Channel.UNLIMITED)
         val commands = mutableListOf<Int>()
         val saved = mutableListOf<Pair<ByteArray, Long>>()
+        val savedEvents = Channel<Unit>(Channel.UNLIMITED)
         var count = 52
         var previewWrites = 0
         var autoImage = true
+        var emitPreviewStatus = true
+        var previewRemainsBusy = false
         var answerQueries = true
         var failPreviewWrite = false
         var queryAck: CompletableDeferred<Unit>? = null
@@ -244,6 +295,7 @@ class EyevueBlePreviewSessionTest {
             publish = { bytes, detectedAt ->
                 onPublish()
                 saved.add(bytes to detectedAt)
+                savedEvents.trySend(Unit)
             },
             onStatus = { _, isReady -> if (isReady) ready.trySend(Unit) },
             now = { timestamp++ },
@@ -266,11 +318,17 @@ class EyevueBlePreviewSessionTest {
             val packet = EyevueProtocol.parseDatagram(bytes)
             commands.add(packet.commandId)
             when (packet.commandId) {
-                0x48, 0x40 -> {
-                    // The long-lived trigger observer and one-shot reply waiter are both armed.
+                0x48 -> {
+                    // Actual 0.5.5 phone trace: configuration replies only, never 0x45 idle.
+                    for (command in listOf(0x01, 0x02, 0x04, 0x06, 0x07, 0x08, 0x09, 0x10, 0x11, 0x61)) {
+                        frames.emit(EyevueFrame(command, byteArrayOf(0)))
+                    }
+                }
+                0x40 -> {
+                    // Trigger observer and count waiter must be armed before the real 0x42 reply.
                     assertEquals(2, frames.subscriptionCount.value)
                     queryAck?.await()
-                    if (answerQueries) frames.emit(if (packet.commandId == 0x48) status(false) else countFrame(count))
+                    if (answerQueries) frames.emit(countFrame(count))
                 }
                 0x22 -> {
                     assertArrayEquals(byteArrayOf(0x31), packet.payload)
@@ -280,10 +338,10 @@ class EyevueBlePreviewSessionTest {
                     if (failPreviewWrite) return Result.failure(IOException("rejected shutter"))
                     // Our AI capture may echo the exact event used by the physical shutter.
                     frames.emit(shutter())
-                    frames.emit(status(true))
+                    if (emitPreviewStatus) frames.emit(status(true))
                     count++
                     frames.emit(countFrame(count))
-                    frames.emit(status(false))
+                    if (emitPreviewStatus && !previewRemainsBusy) frames.emit(status(false))
                     if (autoImage) results.emit(Result.success(jpeg))
                 }
                 else -> error("Unexpected BLE session command")
